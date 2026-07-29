@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>과제 일정 대시보드</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --border:#e3e5e9; --text:#1f2430; --sub:#6b7280;
+    --accent:#4f46e5; --accent-light:#eef0ff;
+    --bar:#c7cbd3;
+    --review-bg:#dbeafe; --review-text:#1d4ed8;
+    --deploy-bg:#dcfce7; --deploy-text:#15803d;
+    --right-bg:#fef3c7; --right-text:#b45309;
+    --done-bg:#e5e7eb; --done-text:#6b7280;
+    --custom-bg:#f3e8ff; --custom-text:#7e22ce;
+    --weekend-text:#dc2626;
+    --today-bg:#fff7d6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+    background:var(--bg); color:var(--text);
+  }
+  .wrap{max-width:1600px; margin:0 auto; padding:20px 24px 60px;}
+  h1{font-size:20px; margin:0 0 4px;}
+  .sub-title{color:var(--sub); font-size:13px; margin:0 0 20px;}
+
+  .cards{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px;}
+  .card .label{font-size:12px; color:var(--sub); margin-bottom:6px;}
+  .card .value{font-size:22px; font-weight:600;}
+  .card .value.small{font-size:14px; font-weight:500; line-height:1.5;}
+
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:10px 14px; margin-bottom:14px;
+  }
+  .toolbar label{font-size:12px; color:var(--sub);}
+  .toolbar select, .toolbar input[type=date]{
+    font-size:13px; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:#fff;
+  }
+  .toolbar .spacer{flex:1;}
+  button{
+    font-size:13px; padding:6px 12px; border-radius:6px; border:1px solid var(--border);
+    background:#fff; cursor:pointer; color:var(--text);
+  }
+  button.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  button:hover{filter:brightness(0.97);}
+  button.tiny{padding:2px 8px; font-size:12px;}
+
+  .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--sub); margin-bottom:10px;}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .swatch{width:12px; height:12px; border-radius:3px; display:inline-block;}
+
+  .table-scroll{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    overflow:auto; max-height:70vh;
+  }
+  table{border-collapse:separate; border-spacing:0; font-size:12.5px; white-space:nowrap;}
+  th, td{border-bottom:1px solid var(--border); border-right:1px solid var(--border); padding:0;}
+  thead th{
+    position:sticky; top:0; background:#fafbfc; z-index:3; padding:6px 8px; font-weight:600; color:var(--sub);
+  }
+  .sticky-col{position:sticky; background:#fff; z-index:2;}
+  thead .sticky-col{z-index:4; background:#fafbfc;}
+  .col-owner{left:0; min-width:110px;}
+  .col-group{left:110px; min-width:150px;}
+  .col-cat{left:260px; min-width:150px;}
+  .col-priority{left:410px; min-width:56px; text-align:center;}
+  .col-iter{left:466px; min-width:56px; text-align:center; border-right:2px solid var(--border);}
+  .editable{padding:6px 8px; outline:none; cursor:text; min-height:18px;}
+  .editable:hover{background:var(--accent-light);}
+  .date-col{min-width:34px; width:34px; text-align:center; font-size:11.5px; color:var(--sub); padding:4px 2px;}
+  .date-col.weekend{color:var(--weekend-text);}
+  .date-col .dow{font-size:10px;}
+  .date-cell{width:34px; min-width:34px; height:32px; cursor:pointer; text-align:center; font-size:10.5px; position:relative;}
+  .date-cell:hover{outline:2px solid var(--accent); outline-offset:-2px;}
+  .date-cell.today-col{background:var(--today-bg);}
+  .tag{display:block; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-weight:600; border-radius:3px;}
+  .row-actions{padding:4px 6px; text-align:center;}
+  tr.group-alt td.sticky-col{background:#fbfbfd;}
+  tr.group-alt td.date-cell.today-col{background:#fff3c2;}
+
+  .popover{
+    position:absolute; background:#fff; border:1px solid var(--border); border-radius:8px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.12); padding:8px; z-index:50; display:flex; flex-direction:column; gap:4px;
+    min-width:120px;
+  }
+  .popover button{text-align:left; width:100%;}
+
+  .footer-note{font-size:12px; color:var(--sub); margin-top:14px; line-height:1.6;}
+  .empty-hint{padding:16px; color:var(--sub); font-size:13px;}
+
+  .section-toggle{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:10px 14px; margin:16px 0 10px; font-size:13px; font-weight:600; color:var(--text);
+  }
+  .section-toggle .count-badge{
+    background:var(--deploy-bg); color:var(--deploy-text); border-radius:999px; padding:1px 9px; font-size:12px; font-weight:600;
+  }
+  .section-toggle .chev{margin-left:auto; color:var(--sub); font-size:12px;}
+  .completed-wrap tr{opacity:0.72;}
+  .completed-wrap .col-group{position:relative;}
+  .badge-complete{
+    display:inline-block; background:var(--deploy-bg); color:var(--deploy-text);
+    border-radius:5px; padding:1px 6px; font-size:11px; font-weight:600; margin-left:6px; white-space:nowrap;
+  }
+  .completed-wrap .editable{cursor:default;}
+  .completed-wrap .editable:hover{background:transparent;}
+  .completed-wrap .date-cell{cursor:default;}
+  .completed-wrap .date-cell:hover{outline:none;}
+
+  .snapshot-banner{
+    background:var(--accent-light); border:1px solid var(--accent); color:var(--accent);
+    border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:600; margin-bottom:14px; display:none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>과제 일정 대시보드</h1>
+  <p class="sub-title">엑셀 수기 관리 대신 사용하는 담당 과제 일정 보드입니다. 날짜 칸을 클릭해 상태(검수/배포/권리/진행 등)를 지정하세요. 변경사항은 이 브라우저에 자동 저장됩니다.</p>
+  <div class="snapshot-banner" id="snapshotBanner">👁 조회 전용 스냅샷입니다 (편집 불가) · 생성 시점의 일정을 그대로 보여줍니다.</div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="toolbar">
+    <label>담당(과제 주체)
+      <select id="filterOwner"></select>
+    </label>
+    <label>이터 여부
+      <select id="filterIter">
+        <option value="all">전체</option>
+        <option value="O">O만</option>
+        <option value="X">X만</option>
+      </select>
+    </label>
+    <label>기간 시작 <input type="date" id="rangeStart"></label>
+    <label>기간 끝 <input type="date" id="rangeEnd"></label>
+    <div class="spacer"></div>
+    <div id="editButtons" style="display:flex; gap:10px; flex-wrap:wrap;">
+    <button id="btnSnapshot" class="primary">📤 팀 공유용 스냅샷 만들기</button>
+    <button id="btnAddTask">+ 과제 추가</button>
+    <button id="btnExport">내보내기(JSON)</button>
+    <button id="btnImport">가져오기(JSON)</button>
+    <button id="btnCsv">CSV 다운로드</button>
+    <button id="btnReset">예시 데이터로 초기화</button>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <div class="table-scroll">
+    <table id="mainTable"></table>
+  </div>
+
+  <button class="section-toggle" id="toggleCompleted">
+    <span>✅ 배포 완료 과제</span>
+    <span class="count-badge" id="completedCount">0</span>
+    <span class="chev" id="completedChev">펼치기 ▾</span>
+  </button>
+  <div class="table-scroll completed-wrap" id="completedTableWrap" style="display:none;">
+    <table id="completedTable"></table>
+  </div>
+
+  <p class="footer-note">
+    사용법 — 셀 클릭: 진행/검수/배포/권리/완료/직접입력/지우기 선택 · 텍스트 칸(담당·과제명·카테고리·우선순위·이터여부) 클릭: 바로 수정 · 행의 ✅: 배포 완료 처리(완료된 과제 영역으로 이동) · 행의 🗑: 과제 삭제 · 데이터는 브라우저 로컬 저장소에 보관되며, "내보내기"로 JSON 백업을 받아두면 다른 PC에서도 "가져오기"로 복원할 수 있습니다.<br>
+    팀 공유 — 이 파일은 내 브라우저에만 저장되어 팀원과 자동으로 동기화되지 않습니다. "📤 팀 공유용 스냅샷 만들기"를 누르면 지금 상태가 그대로 담긴 조회 전용 HTML 파일이 생성되며, 이 파일을 메신저/메일로 보내면 팀원이 열어서 볼 수 있습니다(수정은 불가). 최신 상태를 공유하고 싶을 때마다 다시 눌러 새 스냅샷을 만들어 보내주세요.
+  </p>
+</div>
+
+<input type="file" id="fileInput" accept="application/json" style="display:none">
+
+<script>
+(function(){
+  const SNAPSHOT_MODE = true;
+  const EMBEDDED_STATE = {"rangeStart":"2026-07-11","rangeEnd":"2026-08-15","tasks":[{"id":1,"owner":"증권 코어 TF","group":"국내 소수점 주식 주문하기 (7/24)","category":"권리","priority":2,"iter":"X","cells":{"2026-07-11":{"type":"bar"},"2026-07-12":{"type":"bar"}}},{"id":2,"owner":"내 자산 TF","group":"국내 소수점 주식 주문하기 (7/24)","category":"받은배당 매매일지","priority":2,"iter":"O","cells":{"2026-07-11":{"type":"bar"},"2026-07-12":{"type":"bar"},"2026-07-13":{"type":"deploy"}}},{"id":3,"owner":"증권코어 TF","group":"신대륙","category":"입출금 연결계좌 환전","priority":"","iter":"X","cells":{"2026-07-18":{"type":"bar"},"2026-07-19":{"type":"bar"},"2026-07-25":{"type":"bar"},"2026-07-26":{"type":"bar"},"2026-07-14":{"type":"review"},"2026-07-15":{"type":"review"},"2026-07-16":{"type":"review"},"2026-07-17":{"type":"review"},"2026-07-20":{"type":"review"},"2026-07-21":{"type":"review"},"2026-07-22":{"type":"review"},"2026-07-23":{"type":"review"},"2026-07-24":{"type":"review"},"2026-07-27":{"type":"review"},"2026-07-28":{"type":"review"},"2026-07-29":{"type":"review"},"2026-07-30":{"type":"review"},"2026-07-31":{"type":"review"}}},{"id":4,"owner":"내자산 TF","group":"신대륙","category":"내계좌","priority":"","iter":"X","cells":{"2026-07-18":{"type":"bar"},"2026-07-19":{"type":"bar"},"2026-07-25":{"type":"bar"},"2026-07-26":{"type":"bar"},"2026-07-14":{"type":"review"},"2026-07-15":{"type":"review"},"2026-07-16":{"type":"review"},"2026-07-17":{"type":"review"},"2026-07-20":{"type":"review"},"2026-07-21":{"type":"review"},"2026-07-22":{"type":"review"},"2026-07-23":{"type":"review"},"2026-07-24":{"type":"review"},"2026-07-27":{"type":"review"},"2026-07-28":{"type":"review"},"2026-07-29":{"type":"review"},"2026-07-30":{"type":"review"},"2026-07-31":{"type":"review"}}},{"id":5,"owner":"증권코어 TF","group":"소수점 대응","category":"","priority":"","iter":"","cells":{}},{"id":6,"owner":"유저그로스","group":"국내주식 소수점 랜덤뽑기","category":"페이증권","priority":"","iter":"","cells":{"2026-07-18":{"type":"bar"},"2026-07-19":{"type":"bar"},"2026-08-10":{"type":"review"},"2026-08-11":{"type":"review"},"2026-08-12":{"type":"deploy"}}},{"id":7,"owner":"유저그로스","group":"국내주식 소수점 랜덤뽑기","category":"뱅크","priority":"","iter":"","cells":{"2026-07-18":{"type":"bar"},"2026-07-19":{"type":"bar"},"2026-07-25":{"type":"bar"},"2026-07-26":{"type":"bar"}}},{"id":8,"owner":"유저그로스","group":"카카오멤버십","category":"","priority":"","iter":"","cells":{"2026-07-18":{"type":"bar"},"2026-07-19":{"type":"bar"},"2026-07-25":{"type":"bar"},"2026-07-26":{"type":"bar"}}}]};
+  const LS_KEY = 'taskDashboard_v1';
+  const DOW = ['일','월','화','수','목','금','토'];
+
+  const STATUS_TYPES = {
+    bar:    {label:'진행(회색바)', bg:'var(--bar)', text:'', textColor:'#374151'},
+    review: {label:'검수', bg:'var(--review-bg)', text:'검수', textColor:'var(--review-text)'},
+    deploy: {label:'배포', bg:'var(--deploy-bg)', text:'배포', textColor:'var(--deploy-text)'},
+    right:  {label:'권리', bg:'var(--right-bg)', text:'권리', textColor:'var(--right-text)'},
+    done:   {label:'완료', bg:'var(--done-bg)', text:'완료', textColor:'var(--done-text)'},
+  };
+
+  function seedData(){
+    return {
+      rangeStart: '2026-07-11',
+      rangeEnd: '2026-08-15',
+      tasks: [
+        {id:1, owner:'증권 코어 TF', group:'국내 소수점 주식 주문하기 (7/24)', category:'권리', priority:2, iter:'X',
+          cells:{'2026-07-11':{type:'bar'}, '2026-07-12':{type:'bar'}}},
+        {id:2, owner:'내 자산 TF', group:'국내 소수점 주식 주문하기 (7/24)', category:'받은배당 매매일지', priority:2, iter:'O',
+          cells:{'2026-07-11':{type:'bar'}, '2026-07-12':{type:'bar'}, '2026-07-13':{type:'deploy'}}},
+        {id:3, owner:'증권코어 TF', group:'신대륙', category:'입출금 연결계좌 환전', priority:'', iter:'X',
+          cells: buildReviewRun(['2026-07-18','2026-07-19'], ['2026-07-25','2026-07-26'],
+            ['2026-07-14','2026-07-15','2026-07-16','2026-07-17','2026-07-20','2026-07-21','2026-07-22','2026-07-23','2026-07-24','2026-07-27','2026-07-28','2026-07-29','2026-07-30','2026-07-31'])},
+        {id:4, owner:'내자산 TF', group:'신대륙', category:'내계좌', priority:'', iter:'X',
+          cells: buildReviewRun(['2026-07-18','2026-07-19'], ['2026-07-25','2026-07-26'],
+            ['2026-07-14','2026-07-15','2026-07-16','2026-07-17','2026-07-20','2026-07-21','2026-07-22','2026-07-23','2026-07-24','2026-07-27','2026-07-28','2026-07-29','2026-07-30','2026-07-31'])},
+        {id:5, owner:'증권코어 TF', group:'소수점 대응', category:'', priority:'', iter:'', cells:{}},
+        {id:6, owner:'유저그로스', group:'국내주식 소수점 랜덤뽑기', category:'페이증권', priority:'', iter:'',
+          cells:{'2026-07-18':{type:'bar'}, '2026-07-19':{type:'bar'}, '2026-08-10':{type:'review'}, '2026-08-11':{type:'review'}, '2026-08-12':{type:'deploy'}}},
+        {id:7, owner:'유저그로스', group:'국내주식 소수점 랜덤뽑기', category:'뱅크', priority:'', iter:'',
+          cells:{'2026-07-18':{type:'bar'}, '2026-07-19':{type:'bar'}, '2026-07-25':{type:'bar'}, '2026-07-26':{type:'bar'}}},
+        {id:8, owner:'유저그로스', group:'카카오멤버십', category:'', priority:'', iter:'',
+          cells:{'2026-07-18':{type:'bar'}, '2026-07-19':{type:'bar'}, '2026-07-25':{type:'bar'}, '2026-07-26':{type:'bar'}}},
+      ]
+    };
+  }
+  function buildReviewRun(bar1, bar2, reviewDates){
+    const cells = {};
+    bar1.forEach(d=>cells[d]={type:'bar'});
+    bar2.forEach(d=>cells[d]={type:'bar'});
+    reviewDates.forEach(d=>cells[d]={type:'review'});
+    return cells;
+  }
+
+  let state = load();
+  function load(){
+    if(SNAPSHOT_MODE && EMBEDDED_STATE){
+      return JSON.parse(JSON.stringify(EMBEDDED_STATE));
+    }
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return seedData();
+  }
+  function save(){
+    if(SNAPSHOT_MODE) return;
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  }
+
+  function fmtDate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function todayStr(){
+    return fmtDate(new Date());
+  }
+
+  function dateRange(start, end){
+    const out = [];
+    let d = new Date(start+'T00:00:00');
+    const endD = new Date(end+'T00:00:00');
+    while(d <= endD){
+      out.push(fmtDate(d));
+      d.setDate(d.getDate()+1);
+    }
+    return out;
+  }
+
+  let activePopover = null;
+  function closePopover(){
+    if(activePopover){ activePopover.remove(); activePopover = null; }
+  }
+  document.addEventListener('click', (e)=>{
+    if(activePopover && !activePopover.contains(e.target) && !e.target.classList.contains('date-cell')){
+      closePopover();
+    }
+  });
+
+  function openPopover(cellEl, task, dateStr){
+    closePopover();
+    const pop = document.createElement('div');
+    pop.className = 'popover';
+    const opts = [
+      {key:'bar', label:'진행(회색바)'},
+      {key:'review', label:'검수'},
+      {key:'deploy', label:'배포'},
+      {key:'right', label:'권리'},
+      {key:'done', label:'완료'},
+      {key:'custom', label:'직접 입력...'},
+      {key:'clear', label:'비우기'},
+    ];
+    opts.forEach(o=>{
+      const b = document.createElement('button');
+      b.textContent = o.label;
+      b.className = 'tiny';
+      b.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        if(o.key === 'clear'){
+          delete task.cells[dateStr];
+        } else if(o.key === 'custom'){
+          const txt = prompt('표시할 텍스트를 입력하세요', '');
+          if(txt === null) return;
+          task.cells[dateStr] = {type:'custom', text: txt};
+        } else {
+          task.cells[dateStr] = {type:o.key};
+        }
+        closePopover();
+        save();
+        render();
+      });
+      pop.appendChild(b);
+    });
+    document.body.appendChild(pop);
+    const rect = cellEl.getBoundingClientRect();
+    pop.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+    pop.style.left = (window.scrollX + rect.left) + 'px';
+    activePopover = pop;
+  }
+
+  function uniqueOwners(){
+    const set = new Set(state.tasks.map(t=>t.owner).filter(Boolean));
+    return Array.from(set);
+  }
+
+  let filters = {owner:'all', iter:'all'};
+
+  function renderToolbarOptions(){
+    const ownerSel = document.getElementById('filterOwner');
+    const current = ownerSel.value || 'all';
+    ownerSel.innerHTML = '<option value="all">전체</option>' +
+      uniqueOwners().map(o=>`<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join('');
+    ownerSel.value = uniqueOwners().includes(current) ? current : 'all';
+    document.getElementById('rangeStart').value = state.rangeStart;
+    document.getElementById('rangeEnd').value = state.rangeEnd;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  function renderLegend(){
+    const el = document.getElementById('legend');
+    let html = '';
+    Object.entries(STATUS_TYPES).forEach(([k,v])=>{
+      html += `<span><span class="swatch" style="background:${v.bg}"></span>${v.label}</span>`;
+    });
+    html += `<span><span class="swatch" style="background:var(--custom-bg)"></span>직접입력</span>`;
+    html += `<span><span class="swatch" style="background:var(--today-bg)"></span>오늘</span>`;
+    html += `<span style="color:var(--weekend-text)">토/일 = 빨간 글씨</span>`;
+    el.innerHTML = html;
+  }
+
+  function renderCards(){
+    const today = todayStr();
+    const totalTasks = state.tasks.length;
+    const byOwner = {};
+    state.tasks.forEach(t=>{ byOwner[t.owner] = (byOwner[t.owner]||0)+1; });
+    const ownerSummary = Object.entries(byOwner).map(([o,c])=>`${o} ${c}`).join(' · ') || '-';
+
+    // upcoming milestones (review/deploy/right/custom) from today, next 14 days — excludes already-completed tasks
+    const upcoming = [];
+    state.tasks.filter(t=>!t.completed).forEach(t=>{
+      Object.entries(t.cells||{}).forEach(([d, cell])=>{
+        if(cell.type !== 'bar' && d >= today){
+          upcoming.push({date:d, owner:t.owner, group:t.group, type:cell.type, text: cell.text || STATUS_TYPES[cell.type]?.label || cell.type});
+        }
+      });
+    });
+    upcoming.sort((a,b)=> a.date.localeCompare(b.date));
+    const next5 = upcoming.slice(0,5);
+    const upcomingHtml = next5.length
+      ? next5.map(u=>`${u.date.slice(5)} ${escapeHtml(u.text)} · ${escapeHtml(u.owner)}`).join('<br>')
+      : '예정된 마일스톤 없음';
+
+    const thisWeekEnd = new Date(); thisWeekEnd.setDate(thisWeekEnd.getDate()+7);
+    const thisWeekEndStr = fmtDate(thisWeekEnd);
+    const thisWeekCount = upcoming.filter(u=>u.date <= thisWeekEndStr).length;
+
+    const completedTasks = state.tasks.filter(t=>t.completed);
+
+    const cardsEl = document.getElementById('cards');
+    cardsEl.innerHTML = `
+      <div class="card"><div class="label">전체 과제 수</div><div class="value">${totalTasks}</div></div>
+      <div class="card"><div class="label">담당별 과제 수</div><div class="value small">${escapeHtml(ownerSummary)}</div></div>
+      <div class="card"><div class="label">7일 내 예정 마일스톤</div><div class="value">${thisWeekCount}</div></div>
+      <div class="card"><div class="label">✅ 배포 완료</div><div class="value">${completedTasks.length}</div></div>
+      <div class="card"><div class="label">다가오는 일정 (상위 5)</div><div class="value small">${upcomingHtml}</div></div>
+    `;
+  }
+
+  function matchesFilter(t){
+    if(filters.owner !== 'all' && t.owner !== filters.owner) return false;
+    if(filters.iter !== 'all' && t.iter !== filters.iter) return false;
+    return true;
+  }
+
+  function buildTheadHtml(dates, mode){
+    let thead = '<thead><tr>';
+    thead += `<th class="sticky-col col-owner">과제 주체</th>`;
+    thead += `<th class="sticky-col col-group">과제명</th>`;
+    thead += `<th class="sticky-col col-cat">카테고리</th>`;
+    thead += `<th class="sticky-col col-priority">우선<br>순위</th>`;
+    thead += `<th class="sticky-col col-iter">이터<br>여부</th>`;
+    dates.forEach(d=>{
+      const dow = new Date(d+'T00:00:00').getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      thead += `<th class="date-col ${isWeekend?'weekend':''}">${d.slice(8,10)}<div class="dow">${DOW[dow]}</div></th>`;
+    });
+    thead += `<th class="sticky-col" style="left:auto;">${SNAPSHOT_MODE ? '' : (mode==='completed' ? '되돌리기' : '완료/삭제')}</th>`;
+    thead += '</tr></thead>';
+    return thead;
+  }
+
+  function buildTbodyHtml(tasks, dates, today, mode){
+    let tbody = '<tbody>';
+    if(tasks.length === 0){
+      const msg = mode === 'completed'
+        ? '아직 배포 완료 처리된 과제가 없습니다.'
+        : '표시할 과제가 없습니다. 필터를 확인하거나 "+ 과제 추가"를 눌러 과제를 등록하세요.';
+      tbody += `<tr><td colspan="${6+dates.length}" class="empty-hint">${msg}</td></tr>`;
+    }
+    let lastGroup = null; let altToggle = false;
+    tasks.forEach(t=>{
+      if(t.group !== lastGroup){ altToggle = !altToggle; lastGroup = t.group; }
+      const rowClass = altToggle ? 'group-alt' : '';
+      const editableAttr = (mode === 'completed' || SNAPSHOT_MODE) ? '' : 'contenteditable="true"';
+      tbody += `<tr class="${rowClass}" data-id="${t.id}">`;
+      tbody += `<td class="sticky-col col-owner"><div class="editable" ${editableAttr} data-field="owner">${escapeHtml(t.owner||'')}</div></td>`;
+      const badge = mode === 'completed' ? `<span class="badge-complete">✅ 완료 ${escapeHtml(t.completedAt||'')}</span>` : '';
+      tbody += `<td class="sticky-col col-group"><div class="editable" ${editableAttr} data-field="group">${escapeHtml(t.group||'')}${badge}</div></td>`;
+      tbody += `<td class="sticky-col col-cat"><div class="editable" ${editableAttr} data-field="category">${escapeHtml(t.category||'')}</div></td>`;
+      tbody += `<td class="sticky-col col-priority"><div class="editable" ${editableAttr} data-field="priority">${escapeHtml(t.priority??'')}</div></td>`;
+      tbody += `<td class="sticky-col col-iter"><div class="editable" ${editableAttr} data-field="iter">${escapeHtml(t.iter||'')}</div></td>`;
+      dates.forEach(d=>{
+        const cell = (t.cells||{})[d];
+        const isToday = d === today;
+        let content = '';
+        if(cell){
+          const meta = STATUS_TYPES[cell.type];
+          if(cell.type === 'custom'){
+            content = `<span class="tag" style="background:var(--custom-bg); color:var(--custom-text);">${escapeHtml(cell.text||'')}</span>`;
+          } else if(meta){
+            content = `<span class="tag" style="background:${meta.bg}; color:${meta.textColor};">${meta.text}</span>`;
+          }
+        }
+        const cellAttr = (mode === 'completed' || SNAPSHOT_MODE) ? '' : 'data-clickable="1"';
+        tbody += `<td class="date-cell ${isToday?'today-col':''}" data-date="${d}" ${cellAttr}>${content}</td>`;
+      });
+      if(SNAPSHOT_MODE){
+        tbody += `<td class="row-actions"></td>`;
+      } else if(mode === 'completed'){
+        tbody += `<td class="row-actions"><button class="tiny" data-restore="${t.id}">↩️ 되돌리기</button></td>`;
+      } else {
+        tbody += `<td class="row-actions"><button class="tiny" data-complete="${t.id}" title="배포 완료 처리">✅</button> <button class="tiny" data-del="${t.id}" title="삭제">🗑</button></td>`;
+      }
+      tbody += '</tr>';
+    });
+    tbody += '</tbody>';
+    return tbody;
+  }
+
+  function wireTable(table, mode){
+    if(mode !== 'completed'){
+      table.querySelectorAll('[data-clickable]').forEach(td=>{
+        td.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const tr = td.closest('tr');
+          const id = Number(tr.dataset.id);
+          const task = state.tasks.find(x=>x.id===id);
+          openPopover(td, task, td.dataset.date);
+        });
+      });
+
+      table.querySelectorAll('.editable[contenteditable="true"]').forEach(div=>{
+        div.addEventListener('blur', ()=>{
+          const tr = div.closest('tr');
+          const id = Number(tr.dataset.id);
+          const task = state.tasks.find(x=>x.id===id);
+          const field = div.dataset.field;
+          task[field] = div.textContent.replace(/✅.*$/,'').trim();
+          save();
+          renderCards();
+          renderToolbarOptions();
+        });
+        div.addEventListener('keydown', (e)=>{
+          if(e.key === 'Enter'){ e.preventDefault(); div.blur(); }
+        });
+      });
+
+      table.querySelectorAll('[data-complete]').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const id = Number(btn.dataset.complete);
+          const task = state.tasks.find(x=>x.id===id);
+          task.completed = true;
+          task.completedAt = todayStr();
+          save();
+          render();
+        });
+      });
+
+      table.querySelectorAll('[data-del]').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const id = Number(btn.dataset.del);
+          if(confirm('이 과제를 삭제할까요?')){
+            state.tasks = state.tasks.filter(t=>t.id!==id);
+            save();
+            render();
+          }
+        });
+      });
+    } else {
+      table.querySelectorAll('[data-restore]').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const id = Number(btn.dataset.restore);
+          const task = state.tasks.find(x=>x.id===id);
+          task.completed = false;
+          task.completedAt = '';
+          save();
+          render();
+        });
+      });
+    }
+  }
+
+  function render(){
+    renderToolbarOptions();
+    renderLegend();
+    renderCards();
+
+    const dates = dateRange(state.rangeStart, state.rangeEnd);
+    const today = todayStr();
+
+    const activeTasks = state.tasks.filter(t=>matchesFilter(t) && !t.completed);
+    const completedTasks = state.tasks.filter(t=>matchesFilter(t) && t.completed);
+
+    const mainTable = document.getElementById('mainTable');
+    mainTable.innerHTML = buildTheadHtml(dates, 'active') + buildTbodyHtml(activeTasks, dates, today, 'active');
+    wireTable(mainTable, 'active');
+
+    const completedTable = document.getElementById('completedTable');
+    completedTable.innerHTML = buildTheadHtml(dates, 'completed') + buildTbodyHtml(completedTasks, dates, today, 'completed');
+    wireTable(completedTable, 'completed');
+
+    document.getElementById('completedCount').textContent = completedTasks.length;
+  }
+
+  document.getElementById('toggleCompleted').addEventListener('click', ()=>{
+    const wrap = document.getElementById('completedTableWrap');
+    const chev = document.getElementById('completedChev');
+    const isHidden = wrap.style.display === 'none';
+    wrap.style.display = isHidden ? 'block' : 'none';
+    chev.textContent = isHidden ? '접기 ▴' : '펼치기 ▾';
+  });
+
+  // toolbar events
+  document.getElementById('filterOwner').addEventListener('change', (e)=>{
+    filters.owner = e.target.value; render();
+  });
+  document.getElementById('filterIter').addEventListener('change', (e)=>{
+    filters.iter = e.target.value; render();
+  });
+  document.getElementById('rangeStart').addEventListener('change', (e)=>{
+    state.rangeStart = e.target.value; save(); render();
+  });
+  document.getElementById('rangeEnd').addEventListener('change', (e)=>{
+    state.rangeEnd = e.target.value; save(); render();
+  });
+  document.getElementById('btnAddTask').addEventListener('click', ()=>{
+    const maxId = state.tasks.reduce((m,t)=>Math.max(m,t.id),0);
+    state.tasks.push({id:maxId+1, owner:'새 담당', group:'새 과제명', category:'', priority:'', iter:'', cells:{}, completed:false, completedAt:''});
+    save(); render();
+  });
+  document.getElementById('btnReset').addEventListener('click', ()=>{
+    if(confirm('현재 데이터를 지우고 예시 데이터로 되돌릴까요?')){
+      state = seedData(); save(); render();
+    }
+  });
+  document.getElementById('btnExport').addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '과제일정_백업.json'; a.click();
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById('btnImport').addEventListener('click', ()=>{
+    document.getElementById('fileInput').click();
+  });
+  document.getElementById('fileInput').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const data = JSON.parse(ev.target.result);
+        if(data && Array.isArray(data.tasks)){
+          state = data; save(); render();
+        } else {
+          alert('올바른 백업 파일이 아닙니다.');
+        }
+      }catch(err){ alert('파일을 읽는 중 오류가 발생했습니다.'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+  document.getElementById('btnCsv').addEventListener('click', ()=>{
+    const dates = dateRange(state.rangeStart, state.rangeEnd);
+    const header = ['과제주체','과제명','카테고리','우선순위','이터여부', ...dates];
+    const rows = state.tasks.map(t=>{
+      const cellVals = dates.map(d=>{
+        const c = (t.cells||{})[d];
+        if(!c) return '';
+        if(c.type === 'custom') return c.text || '';
+        return STATUS_TYPES[c.type]?.label || c.type;
+      });
+      return [t.owner, t.group, t.category, t.priority, t.iter, ...cellVals];
+    });
+    const csv = [header, ...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '과제일정.csv'; a.click();
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById('btnSnapshot').addEventListener('click', ()=>{
+    closePopover();
+    const fullHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    const snapshotHtml = fullHtml
+      .replace('const SNAPSHOT_MODE = false;', 'const SNAPSHOT_MODE = true;')
+      .replace('const EMBEDDED_STATE = null;', 'const EMBEDDED_STATE = ' + JSON.stringify(state) + ';');
+    const blob = new Blob([snapshotHtml], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const tag = todayStr().replace(/-/g,'');
+    a.href = url; a.download = `과제일정_스냅샷_${tag}.html`; a.click();
+    URL.revokeObjectURL(url);
+    alert('스냅샷 파일이 다운로드되었습니다. 이 파일을 팀원에게 공유하면, 여는 즉시 지금 상태를 조회 전용으로 볼 수 있어요.');
+  });
+
+  if(SNAPSHOT_MODE){
+    document.getElementById('snapshotBanner').style.display = 'block';
+    document.getElementById('editButtons').style.display = 'none';
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
