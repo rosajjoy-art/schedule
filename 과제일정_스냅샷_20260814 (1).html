@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>과제 일정 대시보드</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --border:#e3e5e9; --text:#1f2430; --sub:#6b7280;
+    --accent:#4f46e5; --accent-light:#eef0ff;
+    --bar:#c7cbd3;
+    --prep-bg:#e2e8f0; --prep-text:#475569;
+    --review-bg:#dbeafe; --review-text:#1d4ed8;
+    --reviewdone-bg:#ccfbf1; --reviewdone-text:#0f766e;
+    --submit-bg:#ede9fe; --submit-text:#6d28d9;
+    --deploy-bg:#dcfce7; --deploy-text:#15803d;
+    --custom-bg:#f3e8ff; --custom-text:#7e22ce;
+    --weekend-text:#dc2626;
+    --today-bg:#fff7d6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+    background:var(--bg); color:var(--text);
+  }
+  .wrap{max-width:1600px; margin:0 auto; padding:20px 24px 60px;}
+  h1{font-size:20px; margin:0 0 4px;}
+  .sub-title{color:var(--sub); font-size:13px; margin:0 0 20px;}
+
+  .cards{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px;}
+  .card .label{font-size:12px; color:var(--sub); margin-bottom:6px;}
+  .card .value{font-size:22px; font-weight:600;}
+  .card .value.small{font-size:14px; font-weight:500; line-height:1.5;}
+
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:10px 14px; margin-bottom:14px;
+  }
+  .toolbar label{font-size:12px; color:var(--sub); display:inline-flex; align-items:center; gap:4px;}
+  .toolbar select, .toolbar input[type=date]{
+    font-size:13px; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:#fff;
+  }
+  .toolbar .spacer{flex:1;}
+  button{
+    font-size:13px; padding:6px 12px; border-radius:6px; border:1px solid var(--border);
+    background:#fff; cursor:pointer; color:var(--text);
+  }
+  button.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  button:hover{filter:brightness(0.97);}
+  button.tiny{padding:2px 8px; font-size:12px;}
+  button.tiny:disabled{opacity:0.3; cursor:not-allowed;}
+
+  .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--sub); margin-bottom:10px;}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .swatch{width:12px; height:12px; border-radius:3px; display:inline-block;}
+
+  .table-scroll{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    overflow:auto; max-height:70vh;
+  }
+  table{border-collapse:separate; border-spacing:0; font-size:12.5px; white-space:nowrap;}
+  th, td{border-bottom:1px solid var(--border); border-right:1px solid var(--border); padding:0;}
+  thead th{
+    position:sticky; top:0; background:#fafbfc; z-index:3; padding:6px 8px; font-weight:600; color:var(--sub);
+  }
+  .sticky-col{position:sticky; background:#fff; z-index:2;}
+  thead .sticky-col{z-index:4; background:#fafbfc;}
+  .col-owner{left:0; min-width:110px;}
+  .col-group{left:110px; min-width:150px;}
+  .col-cat{left:260px; min-width:150px;}
+  .col-priority{left:410px; min-width:56px; text-align:center;}
+  .col-iter{left:466px; min-width:56px; text-align:center; border-right:2px solid var(--border);}
+  .editable{padding:6px 8px; outline:none; cursor:text; min-height:18px;}
+  .editable:hover{background:var(--accent-light);}
+  .owner-select{
+    width:100%; height:100%; border:none; background:transparent; font-size:12.5px; color:var(--text);
+    padding:6px 8px; cursor:pointer; font-family:inherit;
+  }
+  .owner-select:hover{background:var(--accent-light);}
+  .owner-select:focus{outline:2px solid var(--accent); outline-offset:-2px;}
+  .month-cell{
+    position:sticky; top:0; background:#fafbfc; z-index:3; padding:5px 2px; font-weight:600; color:var(--sub);
+    text-align:center; border-bottom:1px solid var(--border); border-right:1px solid var(--border);
+  }
+  .date-col{position:sticky; top:29px; min-width:42px; width:42px; text-align:center; font-size:11.5px; color:var(--sub); padding:4px 2px;}
+  .date-col.weekend{color:var(--weekend-text);}
+  .date-col .dow{font-size:10px;}
+  .date-cell{width:42px; min-width:42px; height:34px; cursor:pointer; text-align:center; font-size:9.5px; position:relative;}
+  .date-cell:hover{outline:2px solid var(--accent); outline-offset:-2px;}
+  .date-cell.today-col{background:var(--today-bg);}
+  .tag{display:flex; width:100%; height:100%; align-items:center; justify-content:center; font-weight:600; border-radius:3px; white-space:normal; line-height:1.1; text-align:center; padding:0 1px;}
+  .row-actions{padding:4px 6px; text-align:center;}
+  tr.group-alt td.sticky-col{background:#fbfbfd;}
+  tr.group-alt td.date-cell.today-col{background:#fff3c2;}
+
+  .popover{
+    position:absolute; background:#fff; border:1px solid var(--border); border-radius:8px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.12); padding:8px; z-index:50; display:flex; flex-direction:column; gap:4px;
+    min-width:120px;
+  }
+  .popover button{text-align:left; width:100%;}
+
+  .footer-note{font-size:12px; color:var(--sub); margin-top:14px; line-height:1.6;}
+  .empty-hint{padding:16px; color:var(--sub); font-size:13px;}
+
+  .section-toggle{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:10px 14px; margin:16px 0 10px; font-size:13px; font-weight:600; color:var(--text);
+  }
+  .section-toggle .count-badge{
+    background:var(--deploy-bg); color:var(--deploy-text); border-radius:999px; padding:1px 9px; font-size:12px; font-weight:600;
+  }
+  .section-toggle .chev{margin-left:auto; color:var(--sub); font-size:12px;}
+  .completed-wrap tr{opacity:0.72;}
+  .completed-wrap .col-group{position:relative;}
+  .badge-complete{
+    display:inline-block; background:var(--deploy-bg); color:var(--deploy-text);
+    border-radius:5px; padding:1px 6px; font-size:11px; font-weight:600; margin-left:6px; white-space:nowrap;
+  }
+  .completed-wrap .editable{cursor:default;}
+  .completed-wrap .editable:hover{background:transparent;}
+  .completed-wrap .date-cell{cursor:default;}
+  .completed-wrap .date-cell:hover{outline:none;}
+
+  .snapshot-banner{
+    background:var(--accent-light); border:1px solid var(--accent); color:var(--accent);
+    border-radius:8px; padding:8px 14px; font-size:12.5px; font-weight:600; margin-bottom:14px; display:none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>과제 일정 대시보드</h1>
+  <p class="sub-title">rosa.jjoy의 담당 과제 일정 보드입니다.</p>
+  <div class="snapshot-banner" id="snapshotBanner">👁 조회 전용 스냅샷입니다 (편집 불가) · 생성 시점의 일정을 그대로 보여줍니다.</div>
+
+  <div class="cards" id="cards">
+      <div class="card"><div class="label">전체 과제 수</div><div class="value">7</div></div>
+      <div class="card"><div class="label">담당별 과제 수</div><div class="value small">증권코어 4 · 유저그로스 2 · 커뮤니티 1</div></div>
+      <div class="card"><div class="label">최근 수정</div><div class="value small">2026-08-14 07:47</div></div>
+      <div class="card"><div class="label">✅ 배포 완료</div><div class="value">0</div></div>
+      <div class="card"><div class="label">다가오는 일정 (상위 5)</div><div class="value small">08-14 검수완료 · 증권코어<br>08-14 검수완료 · 증권코어<br>08-14 검수완료 · 증권코어<br>08-14 검수완료 · 유저그로스<br>08-18 검수 · 증권코어</div></div>
+    </div>
+
+  <div class="toolbar">
+    <label>과제주체
+      <select id="filterOwner"><option value="all">전체</option><option value="증권코어">증권코어</option><option value="유저그로스">유저그로스</option><option value="커뮤니티">커뮤니티</option></select>
+    </label>
+    <label>이터 여부
+      <select id="filterIter">
+        <option value="all">전체</option>
+        <option value="O">O만</option>
+        <option value="X">X만</option>
+      </select>
+    </label>
+    <label>기간 시작 <input type="date" id="rangeStart"></label>
+    <label>기간 끝 <input type="date" id="rangeEnd"></label>
+    <label><input type="checkbox" id="toggleCategoryCol" checked=""> 카테고리 표시</label>
+    <label><input type="checkbox" id="togglePriorityCol" checked=""> 우선순위 표시</label>
+    <div class="spacer"></div>
+    <div id="editButtons" style="display:flex; gap:10px; flex-wrap:wrap;">
+    <button id="btnSnapshot" class="primary">📤 팀 공유용 스냅샷 만들기</button>
+    <button id="btnAddTask">+ 과제 추가</button>
+    <button id="btnExport">내보내기(JSON)</button>
+    <button id="btnImport">가져오기(JSON)</button>
+    <button id="btnCsv">CSV 다운로드</button>
+    <button id="btnReset">예시 데이터로 초기화</button>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"><span><span class="swatch" style="background:var(--prep-bg)"></span>검수준비</span><span><span class="swatch" style="background:var(--review-bg)"></span>검수</span><span><span class="swatch" style="background:var(--reviewdone-bg)"></span>검수완료</span><span><span class="swatch" style="background:var(--submit-bg)"></span>서브밋</span><span><span class="swatch" style="background:var(--deploy-bg)"></span>배포</span><span><span class="swatch" style="background:var(--today-bg)"></span>오늘</span><span style="color:var(--weekend-text)">토/일/공휴일 = 빨간 글씨</span></div>
+
+  <div class="table-scroll">
+    <table id="mainTable"><thead><tr><th class="sticky-col col-owner" rowspan="2" style="left:0px;">과제주체</th><th class="sticky-col col-group" rowspan="2" style="left:110px;">과제명</th><th class="sticky-col col-cat" rowspan="2" style="left:260px;">카테고리</th><th class="sticky-col col-priority" rowspan="2" style="left:410px;">우선<br>순위</th><th class="sticky-col col-iter" rowspan="2" style="left:466px;">이터<br>여부</th><th class="month-cell" colspan="5">7월</th><th class="month-cell" colspan="31">8월</th><th class="month-cell" colspan="20">9월</th><th class="sticky-col" style="left:auto;" rowspan="2">이동/완료/삭제</th></tr><tr><th class="date-col ">27<div class="dow">월</div></th><th class="date-col ">28<div class="dow">화</div></th><th class="date-col ">29<div class="dow">수</div></th><th class="date-col ">30<div class="dow">목</div></th><th class="date-col ">31<div class="dow">금</div></th><th class="date-col weekend">01<div class="dow">토</div></th><th class="date-col weekend">02<div class="dow">일</div></th><th class="date-col ">03<div class="dow">월</div></th><th class="date-col ">04<div class="dow">화</div></th><th class="date-col ">05<div class="dow">수</div></th><th class="date-col ">06<div class="dow">목</div></th><th class="date-col ">07<div class="dow">금</div></th><th class="date-col weekend">08<div class="dow">토</div></th><th class="date-col weekend">09<div class="dow">일</div></th><th class="date-col ">10<div class="dow">월</div></th><th class="date-col ">11<div class="dow">화</div></th><th class="date-col ">12<div class="dow">수</div></th><th class="date-col ">13<div class="dow">목</div></th><th class="date-col ">14<div class="dow">금</div></th><th class="date-col weekend" title="광복절">15<div class="dow">토</div></th><th class="date-col weekend">16<div class="dow">일</div></th><th class="date-col weekend" title="광복절 대체공휴일">17<div class="dow">월</div></th><th class="date-col ">18<div class="dow">화</div></th><th class="date-col ">19<div class="dow">수</div></th><th class="date-col ">20<div class="dow">목</div></th><th class="date-col ">21<div class="dow">금</div></th><th class="date-col weekend">22<div class="dow">토</div></th><th class="date-col weekend">23<div class="dow">일</div></th><th class="date-col ">24<div class="dow">월</div></th><th class="date-col ">25<div class="dow">화</div></th><th class="date-col ">26<div class="dow">수</div></th><th class="date-col ">27<div class="dow">목</div></th><th class="date-col ">28<div class="dow">금</div></th><th class="date-col weekend">29<div class="dow">토</div></th><th class="date-col weekend">30<div class="dow">일</div></th><th class="date-col ">31<div class="dow">월</div></th><th class="date-col ">01<div class="dow">화</div></th><th class="date-col ">02<div class="dow">수</div></th><th class="date-col ">03<div class="dow">목</div></th><th class="date-col ">04<div class="dow">금</div></th><th class="date-col weekend">05<div class="dow">토</div></th><th class="date-col weekend">06<div class="dow">일</div></th><th class="date-col ">07<div class="dow">월</div></th><th class="date-col ">08<div class="dow">화</div></th><th class="date-col ">09<div class="dow">수</div></th><th class="date-col ">10<div class="dow">목</div></th><th class="date-col ">11<div class="dow">금</div></th><th class="date-col weekend">12<div class="dow">토</div></th><th class="date-col weekend">13<div class="dow">일</div></th><th class="date-col ">14<div class="dow">월</div></th><th class="date-col ">15<div class="dow">화</div></th><th class="date-col ">16<div class="dow">수</div></th><th class="date-col ">17<div class="dow">목</div></th><th class="date-col ">18<div class="dow">금</div></th><th class="date-col weekend">19<div class="dow">토</div></th><th class="date-col weekend">20<div class="dow">일</div></th></tr></thead><tbody><tr class="group-alt" data-id="3"><td class="sticky-col col-owner" style="left:0px;"><select class="owner-select" data-field="owner"><option value="증권코어" selected="">증권코어</option><option value="유저그로스">유저그로스</option><option value="커뮤니티">커뮤니티</option></select></td><td class="sticky-col col-group" style="left:110px;"><div class="editable" contenteditable="true" data-field="group">신대륙</div></td><td class="sticky-col col-cat" style="left:260px;"><div class="editable" contenteditable="true" data-field="category">입출금, 연결계좌</div></td><td class="sticky-col col-priority" style="left:410px;"><div class="editable" contenteditable="true" data-field="priority"></div></td><td class="sticky-col col-iter" style="left:466px;"><div class="editable" contenteditable="true" data-field="iter">X</div></td><td class="date-cell " data-date="2026-07-27" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-07-28" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-07-29" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-07-30" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-07-31" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-01" data-clickable="1"></td><td class="date-cell " data-date="2026-08-02" data-clickable="1"></td><td class="date-cell " data-date="2026-08-03" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-04" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-05" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-06" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-07" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-08" data-clickable="1"></td><td class="date-cell " data-date="2026-08-09" data-clickable="1"></td><td class="date-cell " data-date="2026-08-10" data-clickable="1"></td><td class="date-cell " data-date="2026-08-11" data-clickable="1"></td><td class="date-cell " data-date="2026-08-12" data-clickable="1"></td><td class="date-cell " data-date="2026-08-13" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell today-col" data-date="2026-08-14" data-clickable="1"><span class="tag" style="background:var(--reviewdone-bg); color:var(--reviewdone-text);">검수완료</span></td><td class="date-cell " data-date="2026-08-15" data-clickable="1"></td><td class="date-cell " data-date="2026-08-16" data-clickable="1"></td><td class="date-cell " data-date="2026-08-17" data-clickable="1"></td><td class="date-cell " data-date="2026-08-18" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-19" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-20" data-clickable="1"></td><td class="date-cell " data-date="2026-08-21" data-clickable="1"></td><td class="date-cell " data-date="2026-08-22" data-clickable="1"></td><td class="date-cell " data-date="2026-08-23" data-clickable="1"></td><td class="date-cell " data-date="2026-08-24" data-clickable="1"></td><td class="date-cell " data-date="2026-08-25" data-clickable="1"></td><td class="date-cell " data-date="2026-08-26" data-clickable="1"></td><td class="date-cell " data-date="2026-08-27" data-clickable="1"></td><td class="date-cell " data-date="2026-08-28" data-clickable="1"></td><td class="date-cell " data-date="2026-08-29" data-clickable="1"></td><td class="date-cell " data-date="2026-08-30" data-clickable="1"></td><td class="date-cell " data-date="2026-08-31" data-clickable="1"></td><td class="date-cell " data-date="2026-09-01" data-clickable="1"></td><td class="date-cell " data-date="2026-09-02" data-clickable="1"></td><td class="date-cell " data-date="2026-09-03" data-clickable="1"></td><td class="date-cell " data-date="2026-09-04" data-clickable="1"></td><td class="date-cell " data-date="2026-09-05" data-clickable="1"></td><td class="date-cell " data-date="2026-09-06" data-clickable="1"></td><td class="date-cell " data-date="2026-09-07" data-clickable="1"></td><td class="date-cell " data-date="2026-09-08" data-clickable="1"></td><td class="date-cell " data-date="2026-09-09" data-clickable="1"></td><td class="date-cell " data-date="2026-09-10" data-clickable="1"></td><td class="date-cell " data-date="2026-09-11" data-clickable="1"></td><td class="date-cell " data-date="2026-09-12" data-clickable="1"></td><td class="date-cell " data-date="2026-09-13" data-clickable="1"></td><td class="date-cell " data-date="2026-09-14" data-clickable="1"></td><td class="date-cell " data-date="2026-09-15" data-clickable="1"></td><td class="date-cell " data-date="2026-09-16" data-clickable="1"></td><td class="date-cell " data-date="2026-09-17" data-clickable="1"></td><td class="date-cell " data-date="2026-09-18" data-clickable="1"></td><td class="date-cell " data-date="2026-09-19" data-clickable="1"></td><td class="date-cell " data-date="2026-09-20" data-clickable="1"></td><td class="row-actions"><button class="tiny" data-move-up="3" disabled="" title="위로 이동">▲</button><button class="tiny" data-move-down="3" title="아래로 이동">▼</button> <button class="tiny" data-complete="3" title="배포 완료 처리">✅</button> <button class="tiny" data-del="3" title="삭제">🗑</button></td></tr><tr class="group-alt" data-id="4"><td class="sticky-col col-owner" style="left:0px;"><select class="owner-select" data-field="owner"><option value="증권코어" selected="">증권코어</option><option value="유저그로스">유저그로스</option><option value="커뮤니티">커뮤니티</option></select></td><td class="sticky-col col-group" style="left:110px;"><div class="editable" contenteditable="true" data-field="group">신대륙</div></td><td class="sticky-col col-cat" style="left:260px;"><div class="editable" contenteditable="true" data-field="category">내계좌, 계좌내역</div></td><td class="sticky-col col-priority" style="left:410px;"><div class="editable" contenteditable="true" data-field="priority"></div></td><td class="sticky-col col-iter" style="left:466px;"><div class="editable" contenteditable="true" data-field="iter">X</div></td><td class="date-cell " data-date="2026-07-27" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-07-28" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-07-29" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-07-30" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-07-31" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-01" data-clickable="1"></td><td class="date-cell " data-date="2026-08-02" data-clickable="1"></td><td class="date-cell " data-date="2026-08-03" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-04" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-05" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-06" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-07" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-08" data-clickable="1"></td><td class="date-cell " data-date="2026-08-09" data-clickable="1"></td><td class="date-cell " data-date="2026-08-10" data-clickable="1"></td><td class="date-cell " data-date="2026-08-11" data-clickable="1"></td><td class="date-cell " data-date="2026-08-12" data-clickable="1"></td><td class="date-cell " data-date="2026-08-13" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell today-col" data-date="2026-08-14" data-clickable="1"><span class="tag" style="background:var(--reviewdone-bg); color:var(--reviewdone-text);">검수완료</span></td><td class="date-cell " data-date="2026-08-15" data-clickable="1"></td><td class="date-cell " data-date="2026-08-16" data-clickable="1"></td><td class="date-cell " data-date="2026-08-17" data-clickable="1"></td><td class="date-cell " data-date="2026-08-18" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-19" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-20" data-clickable="1"></td><td class="date-cell " data-date="2026-08-21" data-clickable="1"></td><td class="date-cell " data-date="2026-08-22" data-clickable="1"></td><td class="date-cell " data-date="2026-08-23" data-clickable="1"></td><td class="date-cell " data-date="2026-08-24" data-clickable="1"></td><td class="date-cell " data-date="2026-08-25" data-clickable="1"></td><td class="date-cell " data-date="2026-08-26" data-clickable="1"></td><td class="date-cell " data-date="2026-08-27" data-clickable="1"></td><td class="date-cell " data-date="2026-08-28" data-clickable="1"></td><td class="date-cell " data-date="2026-08-29" data-clickable="1"></td><td class="date-cell " data-date="2026-08-30" data-clickable="1"></td><td class="date-cell " data-date="2026-08-31" data-clickable="1"></td><td class="date-cell " data-date="2026-09-01" data-clickable="1"></td><td class="date-cell " data-date="2026-09-02" data-clickable="1"></td><td class="date-cell " data-date="2026-09-03" data-clickable="1"></td><td class="date-cell " data-date="2026-09-04" data-clickable="1"></td><td class="date-cell " data-date="2026-09-05" data-clickable="1"></td><td class="date-cell " data-date="2026-09-06" data-clickable="1"></td><td class="date-cell " data-date="2026-09-07" data-clickable="1"></td><td class="date-cell " data-date="2026-09-08" data-clickable="1"></td><td class="date-cell " data-date="2026-09-09" data-clickable="1"></td><td class="date-cell " data-date="2026-09-10" data-clickable="1"></td><td class="date-cell " data-date="2026-09-11" data-clickable="1"></td><td class="date-cell " data-date="2026-09-12" data-clickable="1"></td><td class="date-cell " data-date="2026-09-13" data-clickable="1"></td><td class="date-cell " data-date="2026-09-14" data-clickable="1"></td><td class="date-cell " data-date="2026-09-15" data-clickable="1"></td><td class="date-cell " data-date="2026-09-16" data-clickable="1"></td><td class="date-cell " data-date="2026-09-17" data-clickable="1"></td><td class="date-cell " data-date="2026-09-18" data-clickable="1"></td><td class="date-cell " data-date="2026-09-19" data-clickable="1"></td><td class="date-cell " data-date="2026-09-20" data-clickable="1"></td><td class="row-actions"><button class="tiny" data-move-up="4" title="위로 이동">▲</button><button class="tiny" data-move-down="4" title="아래로 이동">▼</button> <button class="tiny" data-complete="4" title="배포 완료 처리">✅</button> <button class="tiny" data-del="4" title="삭제">🗑</button></td></tr><tr class="group-alt" data-id="5"><td class="sticky-col col-owner" style="left:0px;"><select class="owner-select" data-field="owner"><option value="증권코어" selected="">증권코어</option><option value="유저그로스">유저그로스</option><option value="커뮤니티">커뮤니티</option></select></td><td class="sticky-col col-group" style="left:110px;"><div class="editable" contenteditable="true" data-field="group">신대륙</div></td><td class="sticky-col col-cat" style="left:260px;"><div class="editable" contenteditable="true" data-field="category">환전</div></td><td class="sticky-col col-priority" style="left:410px;"><div class="editable" contenteditable="true" data-field="priority"></div></td><td class="sticky-col col-iter" style="left:466px;"><div class="editable" contenteditable="true" data-field="iter">X</div></td><td class="date-cell " data-date="2026-07-27" data-clickable="1"></td><td class="date-cell " data-date="2026-07-28" data-clickable="1"></td><td class="date-cell " data-date="2026-07-29" data-clickable="1"></td><td class="date-cell " data-date="2026-07-30" data-clickable="1"></td><td class="date-cell " data-date="2026-07-31" data-clickable="1"></td><td class="date-cell " data-date="2026-08-01" data-clickable="1"></td><td class="date-cell " data-date="2026-08-02" data-clickable="1"></td><td class="date-cell " data-date="2026-08-03" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-04" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-05" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-06" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-07" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-08" data-clickable="1"></td><td class="date-cell " data-date="2026-08-09" data-clickable="1"></td><td class="date-cell " data-date="2026-08-10" data-clickable="1"></td><td class="date-cell " data-date="2026-08-11" data-clickable="1"></td><td class="date-cell " data-date="2026-08-12" data-clickable="1"></td><td class="date-cell " data-date="2026-08-13" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell today-col" data-date="2026-08-14" data-clickable="1"><span class="tag" style="background:var(--reviewdone-bg); color:var(--reviewdone-text);">검수완료</span></td><td class="date-cell " data-date="2026-08-15" data-clickable="1"></td><td class="date-cell " data-date="2026-08-16" data-clickable="1"></td><td class="date-cell " data-date="2026-08-17" data-clickable="1"></td><td class="date-cell " data-date="2026-08-18" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-19" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-20" data-clickable="1"></td><td class="date-cell " data-date="2026-08-21" data-clickable="1"></td><td class="date-cell " data-date="2026-08-22" data-clickable="1"></td><td class="date-cell " data-date="2026-08-23" data-clickable="1"></td><td class="date-cell " data-date="2026-08-24" data-clickable="1"></td><td class="date-cell " data-date="2026-08-25" data-clickable="1"></td><td class="date-cell " data-date="2026-08-26" data-clickable="1"></td><td class="date-cell " data-date="2026-08-27" data-clickable="1"></td><td class="date-cell " data-date="2026-08-28" data-clickable="1"></td><td class="date-cell " data-date="2026-08-29" data-clickable="1"></td><td class="date-cell " data-date="2026-08-30" data-clickable="1"></td><td class="date-cell " data-date="2026-08-31" data-clickable="1"></td><td class="date-cell " data-date="2026-09-01" data-clickable="1"></td><td class="date-cell " data-date="2026-09-02" data-clickable="1"></td><td class="date-cell " data-date="2026-09-03" data-clickable="1"></td><td class="date-cell " data-date="2026-09-04" data-clickable="1"></td><td class="date-cell " data-date="2026-09-05" data-clickable="1"></td><td class="date-cell " data-date="2026-09-06" data-clickable="1"></td><td class="date-cell " data-date="2026-09-07" data-clickable="1"></td><td class="date-cell " data-date="2026-09-08" data-clickable="1"></td><td class="date-cell " data-date="2026-09-09" data-clickable="1"></td><td class="date-cell " data-date="2026-09-10" data-clickable="1"></td><td class="date-cell " data-date="2026-09-11" data-clickable="1"></td><td class="date-cell " data-date="2026-09-12" data-clickable="1"></td><td class="date-cell " data-date="2026-09-13" data-clickable="1"></td><td class="date-cell " data-date="2026-09-14" data-clickable="1"></td><td class="date-cell " data-date="2026-09-15" data-clickable="1"></td><td class="date-cell " data-date="2026-09-16" data-clickable="1"></td><td class="date-cell " data-date="2026-09-17" data-clickable="1"></td><td class="date-cell " data-date="2026-09-18" data-clickable="1"></td><td class="date-cell " data-date="2026-09-19" data-clickable="1"></td><td class="date-cell " data-date="2026-09-20" data-clickable="1"></td><td class="row-actions"><button class="tiny" data-move-up="5" title="위로 이동">▲</button><button class="tiny" data-move-down="5" title="아래로 이동">▼</button> <button class="tiny" data-complete="5" title="배포 완료 처리">✅</button> <button class="tiny" data-del="5" title="삭제">🗑</button></td></tr><tr class="" data-id="7"><td class="sticky-col col-owner" style="left:0px;"><select class="owner-select" data-field="owner"><option value="증권코어">증권코어</option><option value="유저그로스" selected="">유저그로스</option><option value="커뮤니티">커뮤니티</option></select></td><td class="sticky-col col-group" style="left:110px;"><div class="editable" contenteditable="true" data-field="group">페이 국내주식 1주 랜덤뽑기</div></td><td class="sticky-col col-cat" style="left:260px;"><div class="editable" contenteditable="true" data-field="category"></div></td><td class="sticky-col col-priority" style="left:410px;"><div class="editable" contenteditable="true" data-field="priority"></div></td><td class="sticky-col col-iter" style="left:466px;"><div class="editable" contenteditable="true" data-field="iter">X</div></td><td class="date-cell " data-date="2026-07-27" data-clickable="1"></td><td class="date-cell " data-date="2026-07-28" data-clickable="1"></td><td class="date-cell " data-date="2026-07-29" data-clickable="1"></td><td class="date-cell " data-date="2026-07-30" data-clickable="1"></td><td class="date-cell " data-date="2026-07-31" data-clickable="1"></td><td class="date-cell " data-date="2026-08-01" data-clickable="1"></td><td class="date-cell " data-date="2026-08-02" data-clickable="1"></td><td class="date-cell " data-date="2026-08-03" data-clickable="1"></td><td class="date-cell " data-date="2026-08-04" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-05" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-06" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-07" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-08" data-clickable="1"></td><td class="date-cell " data-date="2026-08-09" data-clickable="1"></td><td class="date-cell " data-date="2026-08-10" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-11" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-12" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-08-13" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell today-col" data-date="2026-08-14" data-clickable="1"><span class="tag" style="background:var(--reviewdone-bg); color:var(--reviewdone-text);">검수완료</span></td><td class="date-cell " data-date="2026-08-15" data-clickable="1"></td><td class="date-cell " data-date="2026-08-16" data-clickable="1"></td><td class="date-cell " data-date="2026-08-17" data-clickable="1"></td><td class="date-cell " data-date="2026-08-18" data-clickable="1"></td><td class="date-cell " data-date="2026-08-19" data-clickable="1"></td><td class="date-cell " data-date="2026-08-20" data-clickable="1"></td><td class="date-cell " data-date="2026-08-21" data-clickable="1"></td><td class="date-cell " data-date="2026-08-22" data-clickable="1"></td><td class="date-cell " data-date="2026-08-23" data-clickable="1"></td><td class="date-cell " data-date="2026-08-24" data-clickable="1"></td><td class="date-cell " data-date="2026-08-25" data-clickable="1"></td><td class="date-cell " data-date="2026-08-26" data-clickable="1"></td><td class="date-cell " data-date="2026-08-27" data-clickable="1"></td><td class="date-cell " data-date="2026-08-28" data-clickable="1"></td><td class="date-cell " data-date="2026-08-29" data-clickable="1"></td><td class="date-cell " data-date="2026-08-30" data-clickable="1"></td><td class="date-cell " data-date="2026-08-31" data-clickable="1"></td><td class="date-cell " data-date="2026-09-01" data-clickable="1"></td><td class="date-cell " data-date="2026-09-02" data-clickable="1"></td><td class="date-cell " data-date="2026-09-03" data-clickable="1"></td><td class="date-cell " data-date="2026-09-04" data-clickable="1"></td><td class="date-cell " data-date="2026-09-05" data-clickable="1"></td><td class="date-cell " data-date="2026-09-06" data-clickable="1"></td><td class="date-cell " data-date="2026-09-07" data-clickable="1"></td><td class="date-cell " data-date="2026-09-08" data-clickable="1"></td><td class="date-cell " data-date="2026-09-09" data-clickable="1"></td><td class="date-cell " data-date="2026-09-10" data-clickable="1"></td><td class="date-cell " data-date="2026-09-11" data-clickable="1"></td><td class="date-cell " data-date="2026-09-12" data-clickable="1"></td><td class="date-cell " data-date="2026-09-13" data-clickable="1"></td><td class="date-cell " data-date="2026-09-14" data-clickable="1"></td><td class="date-cell " data-date="2026-09-15" data-clickable="1"></td><td class="date-cell " data-date="2026-09-16" data-clickable="1"></td><td class="date-cell " data-date="2026-09-17" data-clickable="1"></td><td class="date-cell " data-date="2026-09-18" data-clickable="1"></td><td class="date-cell " data-date="2026-09-19" data-clickable="1"></td><td class="date-cell " data-date="2026-09-20" data-clickable="1"></td><td class="row-actions"><button class="tiny" data-move-up="7" title="위로 이동">▲</button><button class="tiny" data-move-down="7" title="아래로 이동">▼</button> <button class="tiny" data-complete="7" title="배포 완료 처리">✅</button> <button class="tiny" data-del="7" title="삭제">🗑</button></td></tr><tr class="group-alt" data-id="8"><td class="sticky-col col-owner" style="left:0px;"><select class="owner-select" data-field="owner"><option value="증권코어" selected="">증권코어</option><option value="유저그로스">유저그로스</option><option value="커뮤니티">커뮤니티</option></select></td><td class="sticky-col col-group" style="left:110px;"><div class="editable" contenteditable="true" data-field="group">옵션탭 웹베이스 서버 전환</div></td><td class="sticky-col col-cat" style="left:260px;"><div class="editable" contenteditable="true" data-field="category"></div></td><td class="sticky-col col-priority" style="left:410px;"><div class="editable" contenteditable="true" data-field="priority"></div></td><td class="sticky-col col-iter" style="left:466px;"><div class="editable" contenteditable="true" data-field="iter">X</div></td><td class="date-cell " data-date="2026-07-27" data-clickable="1"></td><td class="date-cell " data-date="2026-07-28" data-clickable="1"></td><td class="date-cell " data-date="2026-07-29" data-clickable="1"></td><td class="date-cell " data-date="2026-07-30" data-clickable="1"></td><td class="date-cell " data-date="2026-07-31" data-clickable="1"></td><td class="date-cell " data-date="2026-08-01" data-clickable="1"></td><td class="date-cell " data-date="2026-08-02" data-clickable="1"></td><td class="date-cell " data-date="2026-08-03" data-clickable="1"></td><td class="date-cell " data-date="2026-08-04" data-clickable="1"></td><td class="date-cell " data-date="2026-08-05" data-clickable="1"></td><td class="date-cell " data-date="2026-08-06" data-clickable="1"></td><td class="date-cell " data-date="2026-08-07" data-clickable="1"></td><td class="date-cell " data-date="2026-08-08" data-clickable="1"></td><td class="date-cell " data-date="2026-08-09" data-clickable="1"></td><td class="date-cell " data-date="2026-08-10" data-clickable="1"></td><td class="date-cell " data-date="2026-08-11" data-clickable="1"></td><td class="date-cell " data-date="2026-08-12" data-clickable="1"></td><td class="date-cell " data-date="2026-08-13" data-clickable="1"></td><td class="date-cell today-col" data-date="2026-08-14" data-clickable="1"></td><td class="date-cell " data-date="2026-08-15" data-clickable="1"></td><td class="date-cell " data-date="2026-08-16" data-clickable="1"></td><td class="date-cell " data-date="2026-08-17" data-clickable="1"></td><td class="date-cell " data-date="2026-08-18" data-clickable="1"></td><td class="date-cell " data-date="2026-08-19" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-20" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-21" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-22" data-clickable="1"></td><td class="date-cell " data-date="2026-08-23" data-clickable="1"></td><td class="date-cell " data-date="2026-08-24" data-clickable="1"></td><td class="date-cell " data-date="2026-08-25" data-clickable="1"></td><td class="date-cell " data-date="2026-08-26" data-clickable="1"></td><td class="date-cell " data-date="2026-08-27" data-clickable="1"></td><td class="date-cell " data-date="2026-08-28" data-clickable="1"></td><td class="date-cell " data-date="2026-08-29" data-clickable="1"></td><td class="date-cell " data-date="2026-08-30" data-clickable="1"></td><td class="date-cell " data-date="2026-08-31" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-01" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-02" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-03" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-04" data-clickable="1"><span class="tag" style="background:var(--reviewdone-bg); color:var(--reviewdone-text);">검수완료</span></td><td class="date-cell " data-date="2026-09-05" data-clickable="1"></td><td class="date-cell " data-date="2026-09-06" data-clickable="1"></td><td class="date-cell " data-date="2026-09-07" data-clickable="1"></td><td class="date-cell " data-date="2026-09-08" data-clickable="1"></td><td class="date-cell " data-date="2026-09-09" data-clickable="1"></td><td class="date-cell " data-date="2026-09-10" data-clickable="1"></td><td class="date-cell " data-date="2026-09-11" data-clickable="1"></td><td class="date-cell " data-date="2026-09-12" data-clickable="1"></td><td class="date-cell " data-date="2026-09-13" data-clickable="1"></td><td class="date-cell " data-date="2026-09-14" data-clickable="1"></td><td class="date-cell " data-date="2026-09-15" data-clickable="1"></td><td class="date-cell " data-date="2026-09-16" data-clickable="1"></td><td class="date-cell " data-date="2026-09-17" data-clickable="1"></td><td class="date-cell " data-date="2026-09-18" data-clickable="1"></td><td class="date-cell " data-date="2026-09-19" data-clickable="1"></td><td class="date-cell " data-date="2026-09-20" data-clickable="1"></td><td class="row-actions"><button class="tiny" data-move-up="8" title="위로 이동">▲</button><button class="tiny" data-move-down="8" title="아래로 이동">▼</button> <button class="tiny" data-complete="8" title="배포 완료 처리">✅</button> <button class="tiny" data-del="8" title="삭제">🗑</button></td></tr><tr class="" data-id="9"><td class="sticky-col col-owner" style="left:0px;"><select class="owner-select" data-field="owner"><option value="증권코어">증권코어</option><option value="유저그로스" selected="">유저그로스</option><option value="커뮤니티">커뮤니티</option></select></td><td class="sticky-col col-group" style="left:110px;"><div class="editable" contenteditable="true" data-field="group">뱅크 국내주식 1주 랜덤뽑기</div></td><td class="sticky-col col-cat" style="left:260px;"><div class="editable" contenteditable="true" data-field="category"></div></td><td class="sticky-col col-priority" style="left:410px;"><div class="editable" contenteditable="true" data-field="priority"></div></td><td class="sticky-col col-iter" style="left:466px;"><div class="editable" contenteditable="true" data-field="iter">X</div></td><td class="date-cell " data-date="2026-07-27" data-clickable="1"></td><td class="date-cell " data-date="2026-07-28" data-clickable="1"></td><td class="date-cell " data-date="2026-07-29" data-clickable="1"></td><td class="date-cell " data-date="2026-07-30" data-clickable="1"></td><td class="date-cell " data-date="2026-07-31" data-clickable="1"></td><td class="date-cell " data-date="2026-08-01" data-clickable="1"></td><td class="date-cell " data-date="2026-08-02" data-clickable="1"></td><td class="date-cell " data-date="2026-08-03" data-clickable="1"></td><td class="date-cell " data-date="2026-08-04" data-clickable="1"></td><td class="date-cell " data-date="2026-08-05" data-clickable="1"></td><td class="date-cell " data-date="2026-08-06" data-clickable="1"></td><td class="date-cell " data-date="2026-08-07" data-clickable="1"></td><td class="date-cell " data-date="2026-08-08" data-clickable="1"></td><td class="date-cell " data-date="2026-08-09" data-clickable="1"></td><td class="date-cell " data-date="2026-08-10" data-clickable="1"></td><td class="date-cell " data-date="2026-08-11" data-clickable="1"></td><td class="date-cell " data-date="2026-08-12" data-clickable="1"></td><td class="date-cell " data-date="2026-08-13" data-clickable="1"></td><td class="date-cell today-col" data-date="2026-08-14" data-clickable="1"></td><td class="date-cell " data-date="2026-08-15" data-clickable="1"></td><td class="date-cell " data-date="2026-08-16" data-clickable="1"></td><td class="date-cell " data-date="2026-08-17" data-clickable="1"></td><td class="date-cell " data-date="2026-08-18" data-clickable="1"></td><td class="date-cell " data-date="2026-08-19" data-clickable="1"></td><td class="date-cell " data-date="2026-08-20" data-clickable="1"></td><td class="date-cell " data-date="2026-08-21" data-clickable="1"></td><td class="date-cell " data-date="2026-08-22" data-clickable="1"></td><td class="date-cell " data-date="2026-08-23" data-clickable="1"></td><td class="date-cell " data-date="2026-08-24" data-clickable="1"></td><td class="date-cell " data-date="2026-08-25" data-clickable="1"></td><td class="date-cell " data-date="2026-08-26" data-clickable="1"></td><td class="date-cell " data-date="2026-08-27" data-clickable="1"></td><td class="date-cell " data-date="2026-08-28" data-clickable="1"></td><td class="date-cell " data-date="2026-08-29" data-clickable="1"></td><td class="date-cell " data-date="2026-08-30" data-clickable="1"></td><td class="date-cell " data-date="2026-08-31" data-clickable="1"></td><td class="date-cell " data-date="2026-09-01" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-09-02" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-09-03" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-09-04" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-09-05" data-clickable="1"></td><td class="date-cell " data-date="2026-09-06" data-clickable="1"></td><td class="date-cell " data-date="2026-09-07" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-08" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-09" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-10" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-11" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-12" data-clickable="1"></td><td class="date-cell " data-date="2026-09-13" data-clickable="1"></td><td class="date-cell " data-date="2026-09-14" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-15" data-clickable="1"><span class="tag" style="background:var(--reviewdone-bg); color:var(--reviewdone-text);">검수완료</span></td><td class="date-cell " data-date="2026-09-16" data-clickable="1"><span class="tag" style="background:var(--deploy-bg); color:var(--deploy-text);">배포</span></td><td class="date-cell " data-date="2026-09-17" data-clickable="1"></td><td class="date-cell " data-date="2026-09-18" data-clickable="1"></td><td class="date-cell " data-date="2026-09-19" data-clickable="1"></td><td class="date-cell " data-date="2026-09-20" data-clickable="1"></td><td class="row-actions"><button class="tiny" data-move-up="9" title="위로 이동">▲</button><button class="tiny" data-move-down="9" title="아래로 이동">▼</button> <button class="tiny" data-complete="9" title="배포 완료 처리">✅</button> <button class="tiny" data-del="9" title="삭제">🗑</button></td></tr><tr class="group-alt" data-id="11"><td class="sticky-col col-owner" style="left:0px;"><select class="owner-select" data-field="owner"><option value="증권코어">증권코어</option><option value="유저그로스">유저그로스</option><option value="커뮤니티" selected="">커뮤니티</option></select></td><td class="sticky-col col-group" style="left:110px;"><div class="editable" contenteditable="true" data-field="group">커뮤니티 팔로우 프로모션</div></td><td class="sticky-col col-cat" style="left:260px;"><div class="editable" contenteditable="true" data-field="category"></div></td><td class="sticky-col col-priority" style="left:410px;"><div class="editable" contenteditable="true" data-field="priority"></div></td><td class="sticky-col col-iter" style="left:466px;"><div class="editable" contenteditable="true" data-field="iter">X</div></td><td class="date-cell " data-date="2026-07-27" data-clickable="1"></td><td class="date-cell " data-date="2026-07-28" data-clickable="1"></td><td class="date-cell " data-date="2026-07-29" data-clickable="1"></td><td class="date-cell " data-date="2026-07-30" data-clickable="1"></td><td class="date-cell " data-date="2026-07-31" data-clickable="1"></td><td class="date-cell " data-date="2026-08-01" data-clickable="1"></td><td class="date-cell " data-date="2026-08-02" data-clickable="1"></td><td class="date-cell " data-date="2026-08-03" data-clickable="1"></td><td class="date-cell " data-date="2026-08-04" data-clickable="1"></td><td class="date-cell " data-date="2026-08-05" data-clickable="1"></td><td class="date-cell " data-date="2026-08-06" data-clickable="1"></td><td class="date-cell " data-date="2026-08-07" data-clickable="1"></td><td class="date-cell " data-date="2026-08-08" data-clickable="1"></td><td class="date-cell " data-date="2026-08-09" data-clickable="1"></td><td class="date-cell " data-date="2026-08-10" data-clickable="1"></td><td class="date-cell " data-date="2026-08-11" data-clickable="1"></td><td class="date-cell " data-date="2026-08-12" data-clickable="1"></td><td class="date-cell " data-date="2026-08-13" data-clickable="1"></td><td class="date-cell today-col" data-date="2026-08-14" data-clickable="1"></td><td class="date-cell " data-date="2026-08-15" data-clickable="1"></td><td class="date-cell " data-date="2026-08-16" data-clickable="1"></td><td class="date-cell " data-date="2026-08-17" data-clickable="1"></td><td class="date-cell " data-date="2026-08-18" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-19" data-clickable="1"></td><td class="date-cell " data-date="2026-08-20" data-clickable="1"></td><td class="date-cell " data-date="2026-08-21" data-clickable="1"></td><td class="date-cell " data-date="2026-08-22" data-clickable="1"></td><td class="date-cell " data-date="2026-08-23" data-clickable="1"></td><td class="date-cell " data-date="2026-08-24" data-clickable="1"></td><td class="date-cell " data-date="2026-08-25" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-26" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-27" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-28" data-clickable="1"><span class="tag" style="background:var(--prep-bg); color:var(--prep-text);">검수준비</span></td><td class="date-cell " data-date="2026-08-29" data-clickable="1"></td><td class="date-cell " data-date="2026-08-30" data-clickable="1"></td><td class="date-cell " data-date="2026-08-31" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-01" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-02" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-03" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-04" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-05" data-clickable="1"></td><td class="date-cell " data-date="2026-09-06" data-clickable="1"></td><td class="date-cell " data-date="2026-09-07" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-08" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-09" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-10" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-11" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-12" data-clickable="1"></td><td class="date-cell " data-date="2026-09-13" data-clickable="1"></td><td class="date-cell " data-date="2026-09-14" data-clickable="1"><span class="tag" style="background:var(--review-bg); color:var(--review-text);">검수</span></td><td class="date-cell " data-date="2026-09-15" data-clickable="1"><span class="tag" style="background:var(--reviewdone-bg); color:var(--reviewdone-text);">검수완료</span></td><td class="date-cell " data-date="2026-09-16" data-clickable="1"><span class="tag" style="background:var(--deploy-bg); color:var(--deploy-text);">배포</span></td><td class="date-cell " data-date="2026-09-17" data-clickable="1"></td><td class="date-cell " data-date="2026-09-18" data-clickable="1"></td><td class="date-cell " data-date="2026-09-19" data-clickable="1"></td><td class="date-cell " data-date="2026-09-20" data-clickable="1"></td><td class="row-actions"><button class="tiny" data-move-up="11" title="위로 이동">▲</button><button class="tiny" data-move-down="11" disabled="" title="아래로 이동">▼</button> <button class="tiny" data-complete="11" title="배포 완료 처리">✅</button> <button class="tiny" data-del="11" title="삭제">🗑</button></td></tr></tbody></table>
+  </div>
+
+  <button class="section-toggle" id="toggleCompleted">
+    <span>✅ 배포 완료 과제</span>
+    <span class="count-badge" id="completedCount">0</span>
+    <span class="chev" id="completedChev">펼치기 ▾</span>
+  </button>
+  <div class="table-scroll completed-wrap" id="completedTableWrap" style="display:none;">
+    <table id="completedTable"><thead><tr><th class="sticky-col col-owner" rowspan="2" style="left:0px;">과제주체</th><th class="sticky-col col-group" rowspan="2" style="left:110px;">과제명</th><th class="sticky-col col-cat" rowspan="2" style="left:260px;">카테고리</th><th class="sticky-col col-priority" rowspan="2" style="left:410px;">우선<br>순위</th><th class="sticky-col col-iter" rowspan="2" style="left:466px;">이터<br>여부</th><th class="month-cell" colspan="5">7월</th><th class="month-cell" colspan="31">8월</th><th class="month-cell" colspan="20">9월</th><th class="sticky-col" style="left:auto;" rowspan="2">이동/되돌리기</th></tr><tr><th class="date-col ">27<div class="dow">월</div></th><th class="date-col ">28<div class="dow">화</div></th><th class="date-col ">29<div class="dow">수</div></th><th class="date-col ">30<div class="dow">목</div></th><th class="date-col ">31<div class="dow">금</div></th><th class="date-col weekend">01<div class="dow">토</div></th><th class="date-col weekend">02<div class="dow">일</div></th><th class="date-col ">03<div class="dow">월</div></th><th class="date-col ">04<div class="dow">화</div></th><th class="date-col ">05<div class="dow">수</div></th><th class="date-col ">06<div class="dow">목</div></th><th class="date-col ">07<div class="dow">금</div></th><th class="date-col weekend">08<div class="dow">토</div></th><th class="date-col weekend">09<div class="dow">일</div></th><th class="date-col ">10<div class="dow">월</div></th><th class="date-col ">11<div class="dow">화</div></th><th class="date-col ">12<div class="dow">수</div></th><th class="date-col ">13<div class="dow">목</div></th><th class="date-col ">14<div class="dow">금</div></th><th class="date-col weekend" title="광복절">15<div class="dow">토</div></th><th class="date-col weekend">16<div class="dow">일</div></th><th class="date-col weekend" title="광복절 대체공휴일">17<div class="dow">월</div></th><th class="date-col ">18<div class="dow">화</div></th><th class="date-col ">19<div class="dow">수</div></th><th class="date-col ">20<div class="dow">목</div></th><th class="date-col ">21<div class="dow">금</div></th><th class="date-col weekend">22<div class="dow">토</div></th><th class="date-col weekend">23<div class="dow">일</div></th><th class="date-col ">24<div class="dow">월</div></th><th class="date-col ">25<div class="dow">화</div></th><th class="date-col ">26<div class="dow">수</div></th><th class="date-col ">27<div class="dow">목</div></th><th class="date-col ">28<div class="dow">금</div></th><th class="date-col weekend">29<div class="dow">토</div></th><th class="date-col weekend">30<div class="dow">일</div></th><th class="date-col ">31<div class="dow">월</div></th><th class="date-col ">01<div class="dow">화</div></th><th class="date-col ">02<div class="dow">수</div></th><th class="date-col ">03<div class="dow">목</div></th><th class="date-col ">04<div class="dow">금</div></th><th class="date-col weekend">05<div class="dow">토</div></th><th class="date-col weekend">06<div class="dow">일</div></th><th class="date-col ">07<div class="dow">월</div></th><th class="date-col ">08<div class="dow">화</div></th><th class="date-col ">09<div class="dow">수</div></th><th class="date-col ">10<div class="dow">목</div></th><th class="date-col ">11<div class="dow">금</div></th><th class="date-col weekend">12<div class="dow">토</div></th><th class="date-col weekend">13<div class="dow">일</div></th><th class="date-col ">14<div class="dow">월</div></th><th class="date-col ">15<div class="dow">화</div></th><th class="date-col ">16<div class="dow">수</div></th><th class="date-col ">17<div class="dow">목</div></th><th class="date-col ">18<div class="dow">금</div></th><th class="date-col weekend">19<div class="dow">토</div></th><th class="date-col weekend">20<div class="dow">일</div></th></tr></thead><tbody><tr><td colspan="62" class="empty-hint">아직 배포 완료 처리된 과제가 없습니다.</td></tr></tbody></table>
+  </div>
+
+</div>
+
+<input type="file" id="fileInput" accept="application/json" style="display:none">
+
+<script>
+(function(){
+  const SNAPSHOT_MODE = true;
+  const EMBEDDED_STATE = {"rangeStart":"2026-07-27","rangeEnd":"2026-09-20","tasks":[{"id":3,"owner":"증권코어","group":"신대륙","category":"입출금, 연결계좌","priority":"","iter":"X","cells":{"2026-07-18":{"type":"prep"},"2026-07-19":{"type":"prep"},"2026-07-25":{"type":"prep"},"2026-07-26":{"type":"prep"},"2026-07-14":{"type":"review"},"2026-07-16":{"type":"review"},"2026-07-17":{"type":"review"},"2026-07-20":{"type":"review"},"2026-07-21":{"type":"review"},"2026-07-22":{"type":"review"},"2026-07-23":{"type":"review"},"2026-07-24":{"type":"review"},"2026-07-27":{"type":"review"},"2026-07-28":{"type":"review"},"2026-07-29":{"type":"review"},"2026-07-30":{"type":"review"},"2026-07-31":{"type":"review"},"2026-07-15":{"type":"review"},"2026-08-03":{"type":"review"},"2026-08-04":{"type":"review"},"2026-08-05":{"type":"review"},"2026-08-06":{"type":"review"},"2026-08-07":{"type":"review"},"2026-08-13":{"type":"review"},"2026-08-14":{"type":"reviewDone"},"2026-08-18":{"type":"review"},"2026-08-19":{"type":"review"}}},{"id":4,"owner":"증권코어","group":"신대륙","category":"내계좌, 계좌내역","priority":"","iter":"X","cells":{"2026-07-18":{"type":"prep"},"2026-07-19":{"type":"prep"},"2026-07-25":{"type":"prep"},"2026-07-26":{"type":"prep"},"2026-07-14":{"type":"review"},"2026-07-15":{"type":"review"},"2026-07-16":{"type":"review"},"2026-07-17":{"type":"review"},"2026-07-20":{"type":"review"},"2026-07-21":{"type":"review"},"2026-07-22":{"type":"review"},"2026-07-23":{"type":"review"},"2026-07-24":{"type":"review"},"2026-07-27":{"type":"review"},"2026-07-28":{"type":"review"},"2026-07-29":{"type":"review"},"2026-07-30":{"type":"review"},"2026-07-31":{"type":"review"},"2026-08-03":{"type":"review"},"2026-08-04":{"type":"review"},"2026-08-05":{"type":"review"},"2026-08-06":{"type":"review"},"2026-08-07":{"type":"review"},"2026-08-13":{"type":"review"},"2026-08-14":{"type":"reviewDone"},"2026-08-18":{"type":"review"},"2026-08-19":{"type":"review"}}},{"id":5,"owner":"증권코어","group":"신대륙","category":"환전","priority":"","iter":"X","cells":{"2026-08-03":{"type":"review"},"2026-08-04":{"type":"review"},"2026-08-05":{"type":"review"},"2026-08-06":{"type":"review"},"2026-08-07":{"type":"review"},"2026-08-13":{"type":"review"},"2026-08-14":{"type":"reviewDone"},"2026-08-18":{"type":"review"},"2026-08-19":{"type":"review"}}},{"id":7,"owner":"유저그로스","group":"페이 국내주식 1주 랜덤뽑기","category":"","priority":"","iter":"X","cells":{"2026-07-18":{"type":"prep"},"2026-07-19":{"type":"prep"},"2026-07-25":{"type":"prep"},"2026-07-26":{"type":"prep"},"2026-08-10":{"type":"review"},"2026-08-11":{"type":"review"},"2026-08-12":{"type":"review"},"2026-08-06":{"type":"prep"},"2026-08-07":{"type":"prep"},"2026-08-05":{"type":"prep"},"2026-08-04":{"type":"prep"},"2026-08-13":{"type":"review"},"2026-08-14":{"type":"reviewDone"}}},{"id":8,"owner":"증권코어","group":"옵션탭 웹베이스 서버 전환","category":"","priority":"","iter":"X","cells":{"2026-07-18":{"type":"prep"},"2026-07-19":{"type":"prep"},"2026-07-25":{"type":"prep"},"2026-07-26":{"type":"prep"},"2026-08-31":{"type":"review"},"2026-09-01":{"type":"review"},"2026-09-02":{"type":"review"},"2026-09-03":{"type":"review"},"2026-09-04":{"type":"reviewDone"},"2026-08-19":{"type":"prep"},"2026-08-20":{"type":"prep"},"2026-08-21":{"type":"prep"}},"completed":false,"completedAt":""},{"id":9,"owner":"유저그로스","group":"뱅크 국내주식 1주 랜덤뽑기","category":"","priority":"","iter":"X","cells":{"2026-09-09":{"type":"review"},"2026-09-10":{"type":"review"},"2026-09-11":{"type":"review"},"2026-09-16":{"type":"deploy"},"2026-09-14":{"type":"review"},"2026-09-15":{"type":"reviewDone"},"2026-09-07":{"type":"review"},"2026-09-08":{"type":"review"},"2026-09-01":{"type":"prep"},"2026-09-02":{"type":"prep"},"2026-09-03":{"type":"prep"},"2026-09-04":{"type":"prep"}},"completed":false,"completedAt":""},{"id":11,"owner":"커뮤니티","group":"커뮤니티 팔로우 프로모션","category":"","priority":"","iter":"X","cells":{"2026-09-07":{"type":"review"},"2026-09-08":{"type":"review"},"2026-09-09":{"type":"review"},"2026-09-10":{"type":"review"},"2026-09-11":{"type":"review"},"2026-09-14":{"type":"review"},"2026-09-15":{"type":"reviewDone"},"2026-09-16":{"type":"deploy"},"2026-09-02":{"type":"review"},"2026-09-03":{"type":"review"},"2026-09-04":{"type":"review"},"2026-09-01":{"type":"review"},"2026-08-31":{"type":"review"},"2026-08-25":{"type":"prep"},"2026-08-26":{"type":"prep"},"2026-08-27":{"type":"prep"},"2026-08-28":{"type":"prep"},"2026-08-18":{"type":"prep"}},"completed":false,"completedAt":""}],"lastModified":"2026-08-14 07:47"};
+  const LS_KEY = 'taskDashboard_v1';
+  const DOW = ['일','월','화','수','목','금','토'];
+  // 대한민국 법정 공휴일 (관공서의 공휴일에 관한 규정 기준, 대체공휴일 포함). 필요 시 연도를 추가하세요.
+  const HOLIDAY_NAMES = {
+    '2026-01-01': '신정',
+    '2026-02-16': '설날 연휴',
+    '2026-02-17': '설날',
+    '2026-02-18': '설날 연휴',
+    '2026-03-01': '삼일절',
+    '2026-03-02': '삼일절 대체공휴일',
+    '2026-05-05': '어린이날',
+    '2026-05-24': '부처님오신날',
+    '2026-05-25': '부처님오신날 대체공휴일',
+    '2026-06-06': '현충일',
+    '2026-08-15': '광복절',
+    '2026-08-17': '광복절 대체공휴일',
+    '2026-09-24': '추석 연휴',
+    '2026-09-25': '추석',
+    '2026-09-26': '추석 연휴',
+    '2026-10-03': '개천절',
+    '2026-10-05': '개천절 대체공휴일',
+    '2026-10-09': '한글날',
+    '2026-12-25': '크리스마스',
+  };
+  function isHoliday(dateStr){ return Object.prototype.hasOwnProperty.call(HOLIDAY_NAMES, dateStr); }
+  const OWNER_OPTIONS = ['증권코어', '유저그로스', '커뮤니티'];
+  const OWNER_MIGRATION = {
+    '증권 코어 TF': '증권코어',
+    '증권코어 TF': '증권코어',
+    '내 자산 TF': '증권코어',
+    '내자산 TF': '증권코어',
+    '증권코어': '증권코어',
+    '유저그로스': '유저그로스',
+    '커뮤니티': '커뮤니티',
+  };
+
+  const STATUS_TYPES = {
+    prep:       {label:'검수준비', bg:'var(--prep-bg)', text:'검수준비', textColor:'var(--prep-text)'},
+    review:     {label:'검수', bg:'var(--review-bg)', text:'검수', textColor:'var(--review-text)'},
+    reviewDone: {label:'검수완료', bg:'var(--reviewdone-bg)', text:'검수완료', textColor:'var(--reviewdone-text)'},
+    submit:     {label:'서브밋', bg:'var(--submit-bg)', text:'서브밋', textColor:'var(--submit-text)'},
+    deploy:     {label:'배포', bg:'var(--deploy-bg)', text:'배포', textColor:'var(--deploy-text)'},
+  };
+  const CELL_TYPE_MIGRATION = {
+    bar: 'prep',
+    review: 'review',
+    done: 'reviewDone',
+    right: 'reviewDone',
+    deploy: 'deploy',
+  };
+
+  function seedData(){
+    return {
+      rangeStart: '2026-07-27',
+      rangeEnd: '2026-09-20',
+      tasks: [
+        {id:3, owner:"증권코어", group:"신대륙", category:"입출금, 연결계좌", priority:'', iter:"X", completed:false, completedAt:"",
+          cells: {"2026-07-18": {"type": "prep"}, "2026-07-19": {"type": "prep"}, "2026-07-25": {"type": "prep"}, "2026-07-26": {"type": "prep"}, "2026-07-14": {"type": "review"}, "2026-07-16": {"type": "review"}, "2026-07-17": {"type": "review"}, "2026-07-20": {"type": "review"}, "2026-07-21": {"type": "review"}, "2026-07-22": {"type": "review"}, "2026-07-23": {"type": "review"}, "2026-07-24": {"type": "review"}, "2026-07-27": {"type": "review"}, "2026-07-28": {"type": "review"}, "2026-07-29": {"type": "review"}, "2026-07-30": {"type": "review"}, "2026-07-31": {"type": "review"}, "2026-07-15": {"type": "review"}, "2026-08-03": {"type": "review"}, "2026-08-04": {"type": "review"}, "2026-08-05": {"type": "review"}, "2026-08-06": {"type": "review"}, "2026-08-07": {"type": "review"}, "2026-08-13": {"type": "review"}, "2026-08-14": {"type": "reviewDone"}}},
+        {id:4, owner:"증권코어", group:"신대륙", category:"내계좌, 계좌내역", priority:'', iter:"X", completed:false, completedAt:"",
+          cells: {"2026-07-18": {"type": "prep"}, "2026-07-19": {"type": "prep"}, "2026-07-25": {"type": "prep"}, "2026-07-26": {"type": "prep"}, "2026-07-14": {"type": "review"}, "2026-07-15": {"type": "review"}, "2026-07-16": {"type": "review"}, "2026-07-17": {"type": "review"}, "2026-07-20": {"type": "review"}, "2026-07-21": {"type": "review"}, "2026-07-22": {"type": "review"}, "2026-07-23": {"type": "review"}, "2026-07-24": {"type": "review"}, "2026-07-27": {"type": "review"}, "2026-07-28": {"type": "review"}, "2026-07-29": {"type": "review"}, "2026-07-30": {"type": "review"}, "2026-07-31": {"type": "review"}, "2026-08-03": {"type": "review"}, "2026-08-04": {"type": "review"}, "2026-08-05": {"type": "review"}, "2026-08-06": {"type": "review"}, "2026-08-07": {"type": "review"}, "2026-08-13": {"type": "review"}, "2026-08-14": {"type": "reviewDone"}}},
+        {id:5, owner:"증권코어", group:"신대륙", category:"환전", priority:'', iter:"X", completed:false, completedAt:"",
+          cells: {"2026-08-03": {"type": "review"}, "2026-08-04": {"type": "review"}, "2026-08-05": {"type": "review"}, "2026-08-06": {"type": "review"}, "2026-08-07": {"type": "review"}, "2026-08-13": {"type": "review"}, "2026-08-14": {"type": "reviewDone"}}},
+        {id:7, owner:"유저그로스", group:"페이 국내주식 1주 랜덤뽑기", category:"", priority:'', iter:"X", completed:false, completedAt:"",
+          cells: {"2026-07-18": {"type": "prep"}, "2026-07-19": {"type": "prep"}, "2026-07-25": {"type": "prep"}, "2026-07-26": {"type": "prep"}, "2026-08-10": {"type": "review"}, "2026-08-11": {"type": "reviewDone"}, "2026-08-12": {"type": "deploy"}, "2026-08-06": {"type": "prep"}, "2026-08-07": {"type": "prep"}, "2026-08-05": {"type": "prep"}, "2026-08-04": {"type": "prep"}}},
+        {id:8, owner:"증권코어", group:"옵션탭 웹베이스 서버 전환", category:"", priority:'', iter:"X", completed:false, completedAt:"",
+          cells: {"2026-07-18": {"type": "prep"}, "2026-07-19": {"type": "prep"}, "2026-07-25": {"type": "prep"}, "2026-07-26": {"type": "prep"}, "2026-08-31": {"type": "review"}, "2026-09-01": {"type": "review"}, "2026-09-02": {"type": "review"}, "2026-09-03": {"type": "review"}, "2026-09-04": {"type": "reviewDone"}, "2026-08-18": {"type": "prep"}, "2026-08-19": {"type": "prep"}, "2026-08-20": {"type": "prep"}, "2026-08-21": {"type": "prep"}}},
+        {id:9, owner:"유저그로스", group:"뱅크 국내주식 1주 랜덤뽑기", category:"", priority:'', iter:"X", completed:false, completedAt:"",
+          cells: {"2026-09-09": {"type": "review"}, "2026-09-10": {"type": "review"}, "2026-09-11": {"type": "review"}, "2026-09-16": {"type": "deploy"}, "2026-09-14": {"type": "review"}, "2026-09-15": {"type": "reviewDone"}, "2026-09-07": {"type": "review"}, "2026-09-08": {"type": "review"}, "2026-09-01": {"type": "prep"}, "2026-09-02": {"type": "prep"}, "2026-09-03": {"type": "prep"}, "2026-09-04": {"type": "prep"}}},
+        {id:11, owner:"커뮤니티", group:"커뮤니티 팔로우 프로모션", category:"", priority:'', iter:"X", completed:false, completedAt:"",
+          cells: {"2026-09-07": {"type": "review"}, "2026-09-08": {"type": "review"}, "2026-09-09": {"type": "review"}, "2026-09-10": {"type": "review"}, "2026-09-11": {"type": "review"}, "2026-09-14": {"type": "review"}, "2026-09-15": {"type": "reviewDone"}, "2026-09-16": {"type": "deploy"}, "2026-09-02": {"type": "review"}, "2026-09-03": {"type": "review"}, "2026-09-04": {"type": "review"}, "2026-09-01": {"type": "review"}, "2026-08-31": {"type": "review"}, "2026-08-25": {"type": "prep"}, "2026-08-26": {"type": "prep"}, "2026-08-27": {"type": "prep"}, "2026-08-28": {"type": "prep"}}},
+      ]
+    };
+  }
+  function buildReviewRun(bar1, bar2, reviewDates){
+    const cells = {};
+    bar1.forEach(d=>cells[d]={type:'bar'});
+    bar2.forEach(d=>cells[d]={type:'bar'});
+    reviewDates.forEach(d=>cells[d]={type:'review'});
+    return cells;
+  }
+
+  function migrateOwners(st){
+    (st.tasks||[]).forEach(t=>{
+      if(OWNER_MIGRATION[t.owner]){
+        t.owner = OWNER_MIGRATION[t.owner];
+      }
+    });
+    return st;
+  }
+
+  function migrateCellTypes(st){
+    (st.tasks||[]).forEach(t=>{
+      const cells = t.cells || {};
+      Object.keys(cells).forEach(d=>{
+        const cell = cells[d];
+        if(cell && CELL_TYPE_MIGRATION[cell.type]){
+          cell.type = CELL_TYPE_MIGRATION[cell.type];
+        }
+      });
+    });
+    return st;
+  }
+
+  function migrateAll(st){
+    return migrateCellTypes(migrateOwners(st));
+  }
+
+  let state = load();
+  function load(){
+    if(SNAPSHOT_MODE && EMBEDDED_STATE){
+      return migrateAll(JSON.parse(JSON.stringify(EMBEDDED_STATE)));
+    }
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if(raw) return migrateAll(JSON.parse(raw));
+    }catch(e){}
+    return migrateAll(seedData());
+  }
+  function save(){
+    if(SNAPSHOT_MODE) return;
+    state.lastModified = fmtDateTime(new Date());
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  }
+
+  function fmtDate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function fmtDateTime(d){
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    return `${fmtDate(d)} ${hh}:${mm}`;
+  }
+
+  function todayStr(){
+    return fmtDate(new Date());
+  }
+
+  function dateRange(start, end){
+    const out = [];
+    let d = new Date(start+'T00:00:00');
+    const endD = new Date(end+'T00:00:00');
+    while(d <= endD){
+      out.push(fmtDate(d));
+      d.setDate(d.getDate()+1);
+    }
+    return out;
+  }
+
+  let activePopover = null;
+  function closePopover(){
+    if(activePopover){ activePopover.remove(); activePopover = null; }
+  }
+  document.addEventListener('click', (e)=>{
+    if(activePopover && !activePopover.contains(e.target) && !e.target.classList.contains('date-cell')){
+      closePopover();
+    }
+  });
+
+  function openPopover(cellEl, task, dateStr){
+    closePopover();
+    const pop = document.createElement('div');
+    pop.className = 'popover';
+    const opts = [
+      {key:'prep', label:'검수준비'},
+      {key:'review', label:'검수'},
+      {key:'reviewDone', label:'검수완료'},
+      {key:'submit', label:'서브밋'},
+      {key:'deploy', label:'배포'},
+      {key:'clear', label:'비우기'},
+    ];
+    opts.forEach(o=>{
+      const b = document.createElement('button');
+      b.textContent = o.label;
+      b.className = 'tiny';
+      b.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        if(o.key === 'clear'){
+          delete task.cells[dateStr];
+        } else {
+          task.cells[dateStr] = {type:o.key};
+        }
+        closePopover();
+        save();
+        render();
+      });
+      pop.appendChild(b);
+    });
+    document.body.appendChild(pop);
+    const rect = cellEl.getBoundingClientRect();
+    pop.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+    pop.style.left = (window.scrollX + rect.left) + 'px';
+    activePopover = pop;
+  }
+
+  let filters = {owner:'all', iter:'all'};
+  let columnVisibility = {category:true, priority:true};
+
+  const COL_WIDTHS = {owner:110, group:150, cat:150, priority:56, iter:56};
+  function computeLefts(){
+    let left = 0;
+    const lefts = {};
+    lefts.owner = left; left += COL_WIDTHS.owner;
+    lefts.group = left; left += COL_WIDTHS.group;
+    if(columnVisibility.category){ lefts.cat = left; left += COL_WIDTHS.cat; }
+    if(columnVisibility.priority){ lefts.priority = left; left += COL_WIDTHS.priority; }
+    lefts.iter = left; left += COL_WIDTHS.iter;
+    return lefts;
+  }
+
+  function renderToolbarOptions(){
+    const ownerSel = document.getElementById('filterOwner');
+    const current = ownerSel.value || 'all';
+    ownerSel.innerHTML = '<option value="all">전체</option>' +
+      OWNER_OPTIONS.map(o=>`<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join('');
+    ownerSel.value = OWNER_OPTIONS.includes(current) ? current : 'all';
+    document.getElementById('rangeStart').value = state.rangeStart;
+    document.getElementById('rangeEnd').value = state.rangeEnd;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  function renderLegend(){
+    const el = document.getElementById('legend');
+    let html = '';
+    Object.entries(STATUS_TYPES).forEach(([k,v])=>{
+      html += `<span><span class="swatch" style="background:${v.bg}"></span>${v.label}</span>`;
+    });
+    html += `<span><span class="swatch" style="background:var(--today-bg)"></span>오늘</span>`;
+    html += `<span style="color:var(--weekend-text)">토/일/공휴일 = 빨간 글씨</span>`;
+    el.innerHTML = html;
+  }
+
+  function renderCards(){
+    const today = todayStr();
+    const totalTasks = state.tasks.length;
+    const byOwner = {};
+    state.tasks.forEach(t=>{ byOwner[t.owner] = (byOwner[t.owner]||0)+1; });
+    const ownerSummary = Object.entries(byOwner).map(([o,c])=>`${o} ${c}`).join(' · ') || '-';
+
+    // upcoming milestones (review/deploy/right/custom) from today, next 14 days — excludes already-completed tasks
+    const upcoming = [];
+    state.tasks.filter(t=>!t.completed).forEach(t=>{
+      Object.entries(t.cells||{}).forEach(([d, cell])=>{
+        if(cell.type !== 'bar' && d >= today){
+          upcoming.push({date:d, owner:t.owner, group:t.group, type:cell.type, text: cell.text || STATUS_TYPES[cell.type]?.label || cell.type});
+        }
+      });
+    });
+    upcoming.sort((a,b)=> a.date.localeCompare(b.date));
+    const next5 = upcoming.slice(0,5);
+    const upcomingHtml = next5.length
+      ? next5.map(u=>`${u.date.slice(5)} ${escapeHtml(u.text)} · ${escapeHtml(u.owner)}`).join('<br>')
+      : '예정된 마일스톤 없음';
+
+    const completedTasks = state.tasks.filter(t=>t.completed);
+    const lastModifiedText = state.lastModified ? state.lastModified : '수정 기록 없음';
+
+    const cardsEl = document.getElementById('cards');
+    cardsEl.innerHTML = `
+      <div class="card"><div class="label">전체 과제 수</div><div class="value">${totalTasks}</div></div>
+      <div class="card"><div class="label">담당별 과제 수</div><div class="value small">${escapeHtml(ownerSummary)}</div></div>
+      <div class="card"><div class="label">최근 수정</div><div class="value small">${escapeHtml(lastModifiedText)}</div></div>
+      <div class="card"><div class="label">✅ 배포 완료</div><div class="value">${completedTasks.length}</div></div>
+      <div class="card"><div class="label">다가오는 일정 (상위 5)</div><div class="value small">${upcomingHtml}</div></div>
+    `;
+  }
+
+  function matchesFilter(t){
+    if(filters.owner !== 'all' && t.owner !== filters.owner) return false;
+    if(filters.iter !== 'all' && t.iter !== filters.iter) return false;
+    return true;
+  }
+
+  function getVisibleTasks(mode){
+    return mode === 'completed'
+      ? state.tasks.filter(t=>matchesFilter(t) && t.completed)
+      : state.tasks.filter(t=>matchesFilter(t) && !t.completed);
+  }
+
+  function moveTask(id, direction, mode){
+    const list = getVisibleTasks(mode);
+    const idx = list.findIndex(t=>t.id===id);
+    if(idx < 0) return;
+    const swapIdx = idx + direction;
+    if(swapIdx < 0 || swapIdx >= list.length) return;
+    const taskA = list[idx];
+    const taskB = list[swapIdx];
+    const fullIdxA = state.tasks.indexOf(taskA);
+    const fullIdxB = state.tasks.indexOf(taskB);
+    state.tasks[fullIdxA] = taskB;
+    state.tasks[fullIdxB] = taskA;
+    save();
+    render();
+  }
+
+  function monthGroups(dates){
+    const groups = [];
+    dates.forEach(d=>{
+      const ym = d.slice(0,7);
+      const label = `${parseInt(d.slice(5,7),10)}월`;
+      if(groups.length && groups[groups.length-1].ym === ym){
+        groups[groups.length-1].count++;
+      } else {
+        groups.push({ym, label, count:1});
+      }
+    });
+    return groups;
+  }
+
+  function buildTheadHtml(dates, mode){
+    const groups = monthGroups(dates);
+    const lefts = computeLefts();
+    let thead = '<thead><tr>';
+    thead += `<th class="sticky-col col-owner" rowspan="2" style="left:${lefts.owner}px;">과제주체</th>`;
+    thead += `<th class="sticky-col col-group" rowspan="2" style="left:${lefts.group}px;">과제명</th>`;
+    if(columnVisibility.category){
+      thead += `<th class="sticky-col col-cat" rowspan="2" style="left:${lefts.cat}px;">카테고리</th>`;
+    }
+    if(columnVisibility.priority){
+      thead += `<th class="sticky-col col-priority" rowspan="2" style="left:${lefts.priority}px;">우선<br>순위</th>`;
+    }
+    thead += `<th class="sticky-col col-iter" rowspan="2" style="left:${lefts.iter}px;">이터<br>여부</th>`;
+    groups.forEach(g=>{
+      thead += `<th class="month-cell" colspan="${g.count}">${g.label}</th>`;
+    });
+    thead += `<th class="sticky-col" style="left:auto;" rowspan="2">${SNAPSHOT_MODE ? '' : (mode==='completed' ? '이동/되돌리기' : '이동/완료/삭제')}</th>`;
+    thead += '</tr><tr>';
+    dates.forEach(d=>{
+      const dow = new Date(d+'T00:00:00').getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const holidayName = HOLIDAY_NAMES[d];
+      const isNonBiz = isWeekend || !!holidayName;
+      const titleAttr = holidayName ? ` title="${escapeAttr(holidayName)}"` : '';
+      thead += `<th class="date-col ${isNonBiz?'weekend':''}"${titleAttr}>${d.slice(8,10)}<div class="dow">${DOW[dow]}</div></th>`;
+    });
+    thead += '</tr></thead>';
+    return thead;
+  }
+
+  function buildTbodyHtml(tasks, dates, today, mode){
+    const lefts = computeLefts();
+    const metaCount = 3 + (columnVisibility.category?1:0) + (columnVisibility.priority?1:0);
+    let tbody = '<tbody>';
+    if(tasks.length === 0){
+      const msg = mode === 'completed'
+        ? '아직 배포 완료 처리된 과제가 없습니다.'
+        : '표시할 과제가 없습니다. 필터를 확인하거나 "+ 과제 추가"를 눌러 과제를 등록하세요.';
+      tbody += `<tr><td colspan="${metaCount+1+dates.length}" class="empty-hint">${msg}</td></tr>`;
+    }
+    let lastGroup = null; let altToggle = false;
+    tasks.forEach((t, rowIdx)=>{
+      if(t.group !== lastGroup){ altToggle = !altToggle; lastGroup = t.group; }
+      const rowClass = altToggle ? 'group-alt' : '';
+      const editableAttr = (mode === 'completed' || SNAPSHOT_MODE) ? '' : 'contenteditable="true"';
+      const canEditOwner = !(mode === 'completed' || SNAPSHOT_MODE);
+      const ownerCell = canEditOwner
+        ? `<select class="owner-select" data-field="owner">${OWNER_OPTIONS.map(o=>`<option value="${escapeAttr(o)}" ${t.owner===o?'selected':''}>${escapeHtml(o)}</option>`).join('')}</select>`
+        : `<div class="editable">${escapeHtml(t.owner||'')}</div>`;
+      tbody += `<tr class="${rowClass}" data-id="${t.id}">`;
+      tbody += `<td class="sticky-col col-owner" style="left:${lefts.owner}px;">${ownerCell}</td>`;
+      const badge = mode === 'completed' ? `<span class="badge-complete">✅ 완료 ${escapeHtml(t.completedAt||'')}</span>` : '';
+      tbody += `<td class="sticky-col col-group" style="left:${lefts.group}px;"><div class="editable" ${editableAttr} data-field="group">${escapeHtml(t.group||'')}${badge}</div></td>`;
+      if(columnVisibility.category){
+        tbody += `<td class="sticky-col col-cat" style="left:${lefts.cat}px;"><div class="editable" ${editableAttr} data-field="category">${escapeHtml(t.category||'')}</div></td>`;
+      }
+      if(columnVisibility.priority){
+        tbody += `<td class="sticky-col col-priority" style="left:${lefts.priority}px;"><div class="editable" ${editableAttr} data-field="priority">${escapeHtml(t.priority??'')}</div></td>`;
+      }
+      tbody += `<td class="sticky-col col-iter" style="left:${lefts.iter}px;"><div class="editable" ${editableAttr} data-field="iter">${escapeHtml(t.iter||'')}</div></td>`;
+      dates.forEach(d=>{
+        const cell = (t.cells||{})[d];
+        const isToday = d === today;
+        let content = '';
+        if(cell){
+          const meta = STATUS_TYPES[cell.type];
+          if(cell.type === 'custom'){
+            content = `<span class="tag" style="background:var(--custom-bg); color:var(--custom-text);">${escapeHtml(cell.text||'')}</span>`;
+          } else if(meta){
+            content = `<span class="tag" style="background:${meta.bg}; color:${meta.textColor};">${meta.text}</span>`;
+          }
+        }
+        const cellAttr = (mode === 'completed' || SNAPSHOT_MODE) ? '' : 'data-clickable="1"';
+        tbody += `<td class="date-cell ${isToday?'today-col':''}" data-date="${d}" ${cellAttr}>${content}</td>`;
+      });
+      if(SNAPSHOT_MODE){
+        tbody += `<td class="row-actions"></td>`;
+      } else {
+        const upDisabled = rowIdx === 0 ? 'disabled' : '';
+        const downDisabled = rowIdx === tasks.length-1 ? 'disabled' : '';
+        const moveButtons = `<button class="tiny" data-move-up="${t.id}" ${upDisabled} title="위로 이동">▲</button><button class="tiny" data-move-down="${t.id}" ${downDisabled} title="아래로 이동">▼</button>`;
+        if(mode === 'completed'){
+          tbody += `<td class="row-actions">${moveButtons} <button class="tiny" data-restore="${t.id}">↩️ 되돌리기</button></td>`;
+        } else {
+          tbody += `<td class="row-actions">${moveButtons} <button class="tiny" data-complete="${t.id}" title="배포 완료 처리">✅</button> <button class="tiny" data-del="${t.id}" title="삭제">🗑</button></td>`;
+        }
+      }
+      tbody += '</tr>';
+    });
+    tbody += '</tbody>';
+    return tbody;
+  }
+
+  function wireTable(table, mode){
+    table.querySelectorAll('[data-move-up]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        moveTask(Number(btn.dataset.moveUp), -1, mode);
+      });
+    });
+    table.querySelectorAll('[data-move-down]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        moveTask(Number(btn.dataset.moveDown), 1, mode);
+      });
+    });
+
+    if(mode !== 'completed'){
+      table.querySelectorAll('[data-clickable]').forEach(td=>{
+        td.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const tr = td.closest('tr');
+          const id = Number(tr.dataset.id);
+          const task = state.tasks.find(x=>x.id===id);
+          openPopover(td, task, td.dataset.date);
+        });
+      });
+
+      table.querySelectorAll('.editable[contenteditable="true"]').forEach(div=>{
+        div.addEventListener('blur', ()=>{
+          const tr = div.closest('tr');
+          const id = Number(tr.dataset.id);
+          const task = state.tasks.find(x=>x.id===id);
+          const field = div.dataset.field;
+          task[field] = div.textContent.replace(/✅.*$/,'').trim();
+          save();
+          renderCards();
+          renderToolbarOptions();
+        });
+        div.addEventListener('keydown', (e)=>{
+          if(e.key === 'Enter'){ e.preventDefault(); div.blur(); }
+        });
+      });
+
+      table.querySelectorAll('select.owner-select').forEach(sel=>{
+        sel.addEventListener('change', ()=>{
+          const tr = sel.closest('tr');
+          const id = Number(tr.dataset.id);
+          const task = state.tasks.find(x=>x.id===id);
+          task.owner = sel.value;
+          save();
+          render();
+        });
+      });
+
+      table.querySelectorAll('[data-complete]').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const id = Number(btn.dataset.complete);
+          const task = state.tasks.find(x=>x.id===id);
+          task.completed = true;
+          task.completedAt = todayStr();
+          save();
+          render();
+        });
+      });
+
+      table.querySelectorAll('[data-del]').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const id = Number(btn.dataset.del);
+          if(confirm('이 과제를 삭제할까요?')){
+            state.tasks = state.tasks.filter(t=>t.id!==id);
+            save();
+            render();
+          }
+        });
+      });
+    } else {
+      table.querySelectorAll('[data-restore]').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          const id = Number(btn.dataset.restore);
+          const task = state.tasks.find(x=>x.id===id);
+          task.completed = false;
+          task.completedAt = '';
+          save();
+          render();
+        });
+      });
+    }
+  }
+
+  function render(){
+    renderToolbarOptions();
+    renderLegend();
+    renderCards();
+
+    const dates = dateRange(state.rangeStart, state.rangeEnd);
+    const today = todayStr();
+
+    const activeTasks = state.tasks.filter(t=>matchesFilter(t) && !t.completed);
+    const completedTasks = state.tasks.filter(t=>matchesFilter(t) && t.completed);
+
+    const mainTable = document.getElementById('mainTable');
+    mainTable.innerHTML = buildTheadHtml(dates, 'active') + buildTbodyHtml(activeTasks, dates, today, 'active');
+    wireTable(mainTable, 'active');
+
+    const completedTable = document.getElementById('completedTable');
+    completedTable.innerHTML = buildTheadHtml(dates, 'completed') + buildTbodyHtml(completedTasks, dates, today, 'completed');
+    wireTable(completedTable, 'completed');
+
+    document.getElementById('completedCount').textContent = completedTasks.length;
+  }
+
+  document.getElementById('toggleCompleted').addEventListener('click', ()=>{
+    const wrap = document.getElementById('completedTableWrap');
+    const chev = document.getElementById('completedChev');
+    const isHidden = wrap.style.display === 'none';
+    wrap.style.display = isHidden ? 'block' : 'none';
+    chev.textContent = isHidden ? '접기 ▴' : '펼치기 ▾';
+  });
+
+  // toolbar events
+  document.getElementById('filterOwner').addEventListener('change', (e)=>{
+    filters.owner = e.target.value; render();
+  });
+  document.getElementById('filterIter').addEventListener('change', (e)=>{
+    filters.iter = e.target.value; render();
+  });
+  document.getElementById('rangeStart').addEventListener('change', (e)=>{
+    state.rangeStart = e.target.value; save(); render();
+  });
+  document.getElementById('rangeEnd').addEventListener('change', (e)=>{
+    state.rangeEnd = e.target.value; save(); render();
+  });
+  document.getElementById('toggleCategoryCol').addEventListener('change', (e)=>{
+    columnVisibility.category = e.target.checked; render();
+  });
+  document.getElementById('togglePriorityCol').addEventListener('change', (e)=>{
+    columnVisibility.priority = e.target.checked; render();
+  });
+  document.getElementById('btnAddTask').addEventListener('click', ()=>{
+    const maxId = state.tasks.reduce((m,t)=>Math.max(m,t.id),0);
+    state.tasks.push({id:maxId+1, owner:OWNER_OPTIONS[0], group:'새 과제명', category:'', priority:'', iter:'', cells:{}, completed:false, completedAt:''});
+    save(); render();
+  });
+  document.getElementById('btnReset').addEventListener('click', ()=>{
+    if(confirm('현재 데이터를 지우고 예시 데이터로 되돌릴까요?')){
+      state = seedData(); save(); render();
+    }
+  });
+  document.getElementById('btnExport').addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '과제일정_백업.json'; a.click();
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById('btnImport').addEventListener('click', ()=>{
+    document.getElementById('fileInput').click();
+  });
+  document.getElementById('fileInput').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const data = JSON.parse(ev.target.result);
+        if(data && Array.isArray(data.tasks)){
+          state = data; save(); render();
+        } else {
+          alert('올바른 백업 파일이 아닙니다.');
+        }
+      }catch(err){ alert('파일을 읽는 중 오류가 발생했습니다.'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+  document.getElementById('btnCsv').addEventListener('click', ()=>{
+    const dates = dateRange(state.rangeStart, state.rangeEnd);
+    const header = ['과제주체','과제명','카테고리','우선순위','이터여부', ...dates];
+    const rows = state.tasks.map(t=>{
+      const cellVals = dates.map(d=>{
+        const c = (t.cells||{})[d];
+        if(!c) return '';
+        if(c.type === 'custom') return c.text || '';
+        return STATUS_TYPES[c.type]?.label || c.type;
+      });
+      return [t.owner, t.group, t.category, t.priority, t.iter, ...cellVals];
+    });
+    const csv = [header, ...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '과제일정.csv'; a.click();
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById('btnSnapshot').addEventListener('click', ()=>{
+    closePopover();
+    const fullHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    const snapshotHtml = fullHtml
+      .replace('const SNAPSHOT_MODE = false;', 'const SNAPSHOT_MODE = true;')
+      .replace('const EMBEDDED_STATE = null;', 'const EMBEDDED_STATE = ' + JSON.stringify(state) + ';');
+    const blob = new Blob([snapshotHtml], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const tag = todayStr().replace(/-/g,'');
+    a.href = url; a.download = `과제일정_스냅샷_${tag}.html`; a.click();
+    URL.revokeObjectURL(url);
+    alert('스냅샷 파일이 다운로드되었습니다. 이 파일을 팀원에게 공유하면, 여는 즉시 지금 상태를 조회 전용으로 볼 수 있어요.');
+  });
+
+  if(SNAPSHOT_MODE){
+    document.getElementById('snapshotBanner').style.display = 'block';
+    document.getElementById('editButtons').style.display = 'none';
+  }
+
+  render();
+})();
+</script>
+
+
+</body></html>
